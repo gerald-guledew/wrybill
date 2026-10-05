@@ -8,6 +8,12 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+# A library as well as a binary, so the pieces can be tested without
+# starting a process.
+[lib]
+name = "wrybill_cli"
+path = "src/lib.rs"
+
 # The command is always `wrybill`, never shortened (spec 7.5).
 [[bin]]
 name = "wrybill"
@@ -15,6 +21,12 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+wrybill-config.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

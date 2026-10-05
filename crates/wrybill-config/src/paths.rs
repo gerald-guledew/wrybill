@@ -12,6 +12,9 @@ const DATA_FOLDER_NAME: &str = ".wrybill";
 /// The config file's name inside the data folder.
 const CONFIG_FILE_NAME: &str = "config.toml";
 
+/// The name of the folder for Wrybill's own logs, inside the data folder.
+const LOGS_FOLDER_NAME: &str = "logs";
+
 /// The folders and files Wrybill uses on this machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paths {
@@ -80,6 +83,11 @@ impl Paths {
         self.data_folder.join(CONFIG_FILE_NAME)
     }
 
+    /// Where Wrybill's own logs go, whether or not the folder exists yet.
+    pub fn logs_folder(&self) -> PathBuf {
+        self.data_folder.join(LOGS_FOLDER_NAME)
+    }
+
     /// The user's home folder, when it's known. Used to expand `~`.
     pub fn user_home(&self) -> Option<&Path> {
         self.user_home.as_deref()
@@ -132,6 +140,7 @@ mod tests {
 
         assert_eq!(paths.data_folder(), full("home/sam/.wrybill"));
         assert_eq!(paths.config_file(), full("home/sam/.wrybill/config.toml"));
+        assert_eq!(paths.logs_folder(), full("home/sam/.wrybill/logs"));
         assert_eq!(paths.user_home(), Some(full("home/sam").as_path()));
     }
 
