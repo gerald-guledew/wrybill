@@ -1,0 +1,12 @@
+[package]
+name = "wrybill-core"
+description = "Wrybill's core: the protocol, the Conductor, the agent loop, the context builder and the verifier."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

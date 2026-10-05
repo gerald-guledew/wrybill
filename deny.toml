@@ -1,0 +1,59 @@
+# cargo-deny rules for Wrybill's own dependencies (spec 11.8): security
+# advisories, licences, banned crates and where crates may come from.
+#
+# Run it with `cargo deny check`. `cargo audit` runs beside it in CI.
+
+[graph]
+# The targets Wrybill ships (spec 14.1), with every feature switched on, so a
+# crate that only arrives with an optional feature is checked too.
+targets = [
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+]
+all-features = true
+
+[advisories]
+# Known vulnerabilities are always errors. These settings widen the check to
+# the whole dependency graph, not just the crates Wrybill names itself.
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+
+[licenses]
+# The permissive licences Rust crates usually carry. Anything else fails the
+# check until the maintainer records a decision: an entry under `exceptions`
+# here, and a row in docs/DECISIONS.md.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+]
+# The list is a policy, so a licence that no crate uses yet isn't a problem.
+unused-allowed-license = "allow"
+
+[bans]
+# Two versions of one crate are worth a look, but often can't be avoided.
+multiple-versions = "warn"
+deny = [
+    { crate = "openssl", reason = "Wrybill has no OpenSSL dependency (spec 14). Use rustls." },
+    { crate = "openssl-sys", reason = "Wrybill has no OpenSSL dependency (spec 14). Use rustls." },
+    { crate = "native-tls", reason = "It brings in OpenSSL on Linux (spec 14). Use rustls." },
+]
+
+[sources]
+# Crates come from crates.io and nowhere else.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
