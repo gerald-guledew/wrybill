@@ -33,4 +33,6 @@ The main design choices and the reason for each, so nobody has to guess why some
 | Config | Data in `~/.wrybill` (movable with `WRYBILL_HOME`); task workspaces in `~/Wrybill/workspaces` | The same on every OS and easy to back up; results stay in a visible folder |
 | Browser | Two backends behind one interface (CDP for an installed Chromium browser, WebDriver BiDi for Firefox), always with Wrybill's own profile | Lighter and safer than bundling a browser or using the user's real profile. Chrome 136 and later block automation of the default profile, and Chrome 151 dropped macOS 12, so 2015 Macs need Firefox |
 | Platforms | 64-bit only, with a baseline x86-64 CPU target | Covers almost every 2015 laptop without special builds |
+| Platforms | Linux GNU builds are made on Ubuntu 24.04, and the static `musl` CLI covers older systems | GitHub removes its Ubuntu 22.04 runners on 17 April 2027. Until then CI also runs the static binaries there (SPEC 14.1) |
 | Testing | A starter eval suite (E1 to E11) defines "any task" until real everyday jobs replace it | Milestones need concrete done-when checks from the start (SPEC 18.1) |
+| Tooling | CI uses only GitHub's own actions, pinned by commit SHA, and `deny.toml` bans OpenSSL and native-tls | The build gets the same care as the dependencies (SPEC 11.8), and "no OpenSSL" (SPEC 14) is enforced by a tool |
