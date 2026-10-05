@@ -4,9 +4,9 @@
 use std::path::Path;
 
 use wrybill_config::{
-    Autonomy, Config, CostTier, Defaults, KeyRef, Limits, LocalToCloud, Locality, McpServer,
-    McpTransport, McpTrust, Model, Provider, Role, Routing, Safety, Search, SearchProvider,
-    Storage, ToolCalling, Url, parse,
+    Autonomy, Config, CostTier, Defaults, KeyRef, KeyUse, Limits, LocalToCloud, Locality,
+    McpServer, McpTransport, McpTrust, Model, Provider, Role, Routing, Safety, Search,
+    SearchProvider, Storage, ToolCalling, Url, key_use, parse,
 };
 
 use crate::support::{
@@ -28,6 +28,52 @@ fn key(name: &str) -> KeyRef {
 
 fn url(text: &str) -> Url {
     Url::parse(text).expect("a valid URL")
+}
+
+// Who finds a key by its name, with no config line (spec 13.1).
+
+#[test]
+fn a_key_saved_under_a_hosted_provider_is_found_by_its_models() {
+    assert_eq!(key_use("anthropic"), KeyUse::Models(Provider::Anthropic));
+    assert_eq!(key_use("openai"), KeyUse::Models(Provider::Openai));
+    assert_eq!(key_use("gemini"), KeyUse::Models(Provider::Gemini));
+    assert_eq!(key_use("openrouter"), KeyUse::Models(Provider::Openrouter));
+}
+
+#[test]
+fn a_key_saved_under_a_search_provider_is_found_by_web_search() {
+    assert_eq!(key_use("brave"), KeyUse::Search(SearchProvider::Brave));
+    assert_eq!(key_use("exa"), KeyUse::Search(SearchProvider::Exa));
+    assert_eq!(key_use("tavily"), KeyUse::Search(SearchProvider::Tavily));
+}
+
+#[test]
+fn a_key_saved_under_any_other_name_has_to_be_pointed_at() {
+    // SearXNG takes no key, and an OpenAI-compatible server has no key of
+    // its own to find.
+    for name in [
+        "searxng",
+        "openai-compatible",
+        "claude-work",
+        "Anthropic",
+        "",
+    ] {
+        assert_eq!(key_use(name), KeyUse::ByReference, "{name}");
+    }
+}
+
+#[test]
+fn the_name_a_provider_looks_under_is_the_name_keys_set_saves_under() {
+    // The two halves of one rule: `wrybill keys set anthropic` saves under
+    // "anthropic", and a hosted model with no `api_key` line looks there.
+    let config = valid(&hosted_model(""));
+    let looked_for = config.models[0].api_key.clone();
+
+    assert_eq!(looked_for, Some(key("anthropic")));
+    assert_eq!(
+        key_use("anthropic"),
+        KeyUse::Models(config.models[0].provider)
+    );
 }
 
 // The top of the file.

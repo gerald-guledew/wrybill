@@ -21,6 +21,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+rpassword.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 wrybill-config.workspace = true

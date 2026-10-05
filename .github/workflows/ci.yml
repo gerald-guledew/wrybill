@@ -142,6 +142,29 @@ jobs:
       - name: Tests
         run: cargo test --locked --target "$TARGET"
 
+      # Two tests use the real OS keychain. They're opt-in, because they write
+      # to the keychain of whoever runs them. A runner is thrown away
+      # afterwards, so here they always run: they show that
+      # `wrybill keys set` really stores a key on each OS.
+      - name: Give the Linux runner a keychain
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gnome-keyring dbus-daemon
+
+      - name: Tests against the real keychain
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # A session bus of its own, and a keyring unlocked with a
+            # throwaway password, as a desktop login would leave it.
+            dbus-run-session -- bash -eo pipefail -c '
+              echo "throwaway-not-a-secret" | gnome-keyring-daemon --unlock --components=secrets --daemonize
+              cargo test --locked --target "$TARGET" -- --ignored real_keychain
+            '
+          else
+            cargo test --locked --target "$TARGET" -- --ignored real_keychain
+          fi
+
       # The musl targets need nothing extra while every dependency is pure
       # Rust. A crate that compiles C would need `musl-tools` installed here.
       - name: Release build

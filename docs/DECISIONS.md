@@ -32,6 +32,8 @@ The main design choices and the reason for each, so nobody has to guess why some
 | Config | TOML config; API keys in the OS keychain | Simple and hard to break; keys stay protected |
 | Config | Data in `~/.wrybill` (movable with `WRYBILL_HOME`); task workspaces in `~/Wrybill/workspaces` | The same on every OS and easy to back up; results stay in a visible folder |
 | Config | `env:` key references are accepted on every OS, and `wrybill doctor` warns wherever one is used | Servers, containers, CI and SSH sessions often can't reach a keychain (SPEC 11.6) |
+| Config | On Linux the keychain is reached through a pure-Rust Secret Service client, not libdbus | The CLI has to start on headless Linux and build as a static `musl` binary (SPEC 6, 14.1) |
+| Config | The hidden prompt in `wrybill keys set` uses the `rpassword` crate | It's small, and it does one job on all three OSes |
 | Config | Settings are optional with sensible defaults: keys are found by their provider's name, and Wrybill works out a model's roles and abilities itself | The main goal is to be easy and simple for the user (SPEC 1) |
 | Browser | Two backends behind one interface (CDP for an installed Chromium browser, WebDriver BiDi for Firefox), always with Wrybill's own profile | Lighter and safer than bundling a browser or using the user's real profile. Chrome 136 and later block automation of the default profile, and Chrome 151 dropped macOS 12, so 2015 Macs need Firefox |
 | Platforms | 64-bit only, with a baseline x86-64 CPU target | Covers almost every 2015 laptop without special builds |

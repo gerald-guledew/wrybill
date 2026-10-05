@@ -79,3 +79,145 @@ fn help_and_version_create_no_files_or_folders() {
         assert!(left_behind.is_empty(), "{left_behind:?} after {args:?}");
     }
 }
+
+// `wrybill keys set`, as far as it goes without touching a keychain: every
+// run below is turned away before anything is saved.
+
+/// Something shaped like a key. No test may ever find it in what the command
+/// prints or logs.
+const MARKER: &str = "sk-test-MARKER-0123456789abcdef";
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
+}
+
+/// Everything in the log files under a data folder.
+fn log(data_folder: &Path) -> String {
+    let Ok(files) = fs::read_dir(data_folder.join("logs")) else {
+        return String::new();
+    };
+    files
+        .map(|file| fs::read_to_string(file.expect("a log file").path()).expect("log text"))
+        .collect()
+}
+
+fn assert_the_key_is_nowhere(output: &Output, data_folder: &Path) {
+    for (place, text) in [
+        ("stdout", stdout(output)),
+        ("stderr", stderr(output)),
+        ("the log", log(data_folder)),
+    ] {
+        assert!(!text.contains("MARKER"), "the key is in {place}:\n{text}");
+    }
+}
+
+#[test]
+fn a_key_on_the_command_line_is_refused() {
+    let folder = data_folder("key-on-the-command-line");
+
+    let output = wrybill(&folder, &["keys", "set", "anthropic", MARKER]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(
+        stderr(&output).starts_with("A key doesn't go on the command line."),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        log(&folder).contains("nothing was saved"),
+        "{}",
+        log(&folder)
+    );
+    assert_the_key_is_nowhere(&output, &folder);
+}
+
+#[test]
+fn a_flag_and_a_key_after_the_name_are_refused_the_same_way() {
+    let folder = data_folder("flag-and-key");
+
+    let output = wrybill(&folder, &["keys", "set", "anthropic", "--key", MARKER]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        stderr(&output).starts_with("A key doesn't go on the command line."),
+        "{}",
+        stderr(&output)
+    );
+    assert_the_key_is_nowhere(&output, &folder);
+}
+
+#[test]
+fn a_key_where_the_name_goes_is_refused_and_not_echoed() {
+    let folder = data_folder("key-as-name");
+    let key_as_name = MARKER.to_uppercase();
+
+    let output = wrybill(&folder, &["keys", "set", &key_as_name]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        stderr(&output).starts_with("That isn't a name a key can be saved under."),
+        "{}",
+        stderr(&output)
+    );
+    assert_the_key_is_nowhere(&output, &folder);
+}
+
+#[test]
+fn piping_in_nothing_saves_nothing() {
+    // The tests give the command no input, which is what an empty pipe is.
+    let folder = data_folder("nothing-piped");
+
+    let output = wrybill(&folder, &["keys", "set", "anthropic"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(stderr(&output), "No key was given, so nothing was saved.\n");
+}
+
+#[test]
+fn keys_on_its_own_shows_what_it_can_do() {
+    let folder = data_folder("keys-alone");
+
+    let output = wrybill(&folder, &["keys"]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr(&output).contains("Usage: wrybill keys <COMMAND>"));
+    assert!(!folder.exists(), "showing help created the data folder");
+}
+
+#[test]
+fn a_log_level_that_is_not_one_gets_a_note() {
+    let folder = data_folder("unknown-level");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_wrybill"))
+        .args(["keys", "set", "searxng"])
+        .env("WRYBILL_HOME", &folder)
+        .env("WRYBILL_LOG", "loud")
+        .output()
+        .expect("the wrybill binary should start");
+
+    assert!(
+        stderr(&output).starts_with(
+            "Note: WRYBILL_LOG isn't one of error, warn, info, debug or trace, so the log is at info.\n"
+        ),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn a_data_folder_that_cannot_be_used_gets_a_note_and_the_command_carries_on() {
+    // WRYBILL_HOME isn't a full path, so there's nowhere to keep a log.
+    let output = Command::new(env!("CARGO_BIN_EXE_wrybill"))
+        .args(["keys", "set", "searxng"])
+        .env("WRYBILL_HOME", "not-a-full-path")
+        .output()
+        .expect("the wrybill binary should start");
+
+    assert_eq!(
+        stderr(&output),
+        "Note: Wrybill isn't keeping a log of this run. Reason: WRYBILL_HOME must be the full path of a folder. It can't start from the current folder or with ~.\n\
+         SearXNG takes no key, so there's nothing to save.\n"
+    );
+    assert_eq!(output.status.code(), Some(2));
+}

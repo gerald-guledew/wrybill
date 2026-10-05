@@ -333,6 +333,38 @@ impl Provider {
     }
 }
 
+/// Who finds a key saved under a given name, with no config line needed
+/// (spec 13.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyUse {
+    /// Every model from this hosted provider.
+    Models(Provider),
+    /// Web search with this provider.
+    Search(SearchProvider),
+    /// Nobody does. A model has to point at the key with
+    /// `keychain:wrybill/<name>`.
+    ByReference,
+}
+
+/// Works out who finds a key saved under `name` by themselves.
+///
+/// It's the other side of the rule that fills in a missing `api_key`: a
+/// hosted model or a search provider looks for the key saved under its
+/// provider's name.
+pub fn key_use(name: &str) -> KeyUse {
+    let model_provider = Provider::CHOICES
+        .iter()
+        .find(|(word, provider)| *word == name && provider.is_hosted());
+    let search_provider = SearchProvider::CHOICES
+        .iter()
+        .find(|(word, provider)| *word == name && provider.takes_a_key());
+    match (model_provider, search_provider) {
+        (Some((_, provider)), _) => KeyUse::Models(*provider),
+        (None, Some((_, provider))) => KeyUse::Search(*provider),
+        (None, None) => KeyUse::ByReference,
+    }
+}
+
 /// What a model is meant for (spec 8.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
