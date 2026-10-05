@@ -21,6 +21,15 @@ pub fn problems(text: &str) -> Vec<String> {
     }
 }
 
+/// The warnings a config has, whether or not it also has problems.
+pub fn warnings(text: &str) -> Vec<String> {
+    let warnings = match parse(text, Some(&home())) {
+        Ok(valid) => valid.warnings,
+        Err(invalid) => invalid.warnings,
+    };
+    warnings.iter().map(ToString::to_string).collect()
+}
+
 /// The config, which has to be valid.
 pub fn valid(text: &str) -> Config {
     match parse(text, Some(&home())) {

@@ -5,6 +5,7 @@ use std::path::Path;
 
 use toml::de::DeTable;
 
+use crate::check;
 use crate::model::Config;
 use crate::problem::Problem;
 use crate::reader::Report;
@@ -118,6 +119,7 @@ pub fn parse(text: &str, user_home: Option<&Path>) -> Result<Valid, Invalid> {
     };
 
     let draft = validate::read(table.get_ref(), user_home, &mut report);
+    check::cross_check(&draft, &mut report);
     let has_errors = report.has_errors();
     let (errors, warnings) = report.finish();
     if has_errors {

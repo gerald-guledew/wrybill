@@ -2,6 +2,7 @@
 //!
 //! They run against the crate's public API, as the CLI will use it.
 
+mod checks;
 mod files;
 mod keys;
 mod spec_examples;

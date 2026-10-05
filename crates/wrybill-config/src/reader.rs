@@ -66,6 +66,20 @@ impl Report {
         });
     }
 
+    /// Records something that's allowed but worth a second look.
+    pub(crate) fn warning(
+        &mut self,
+        line: Option<usize>,
+        place: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        self.warnings.push(Problem {
+            line,
+            place: place.into(),
+            message: message.into(),
+        });
+    }
+
     pub(crate) fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
@@ -201,9 +215,25 @@ impl<'a> Section<'a> {
         }
     }
 
+    /// Where this table sits in the file.
+    pub(crate) fn place(&self) -> &Place {
+        &self.place
+    }
+
     /// Whether the file has this key here, whatever its value.
     pub(crate) fn has(&self, key: &str) -> bool {
         self.entries.iter().any(|entry| entry.key == key)
+    }
+
+    /// The line this key is on, if the file has it here, whatever its value.
+    pub(crate) fn line_of(&self, key: &str, report: &Report) -> Option<usize> {
+        let entry = self.entries.iter().find(|entry| entry.key == key)?;
+        Some(report.line_at(entry.offset))
+    }
+
+    /// Whether the file has any key here apart from this one.
+    pub(crate) fn has_keys_other_than(&self, key: &str) -> bool {
+        self.entries.iter().any(|entry| entry.key != key)
     }
 
     /// Records an error about one of this table's keys.
