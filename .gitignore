@@ -1,0 +1,26 @@
+# Rust build output (Cargo.lock is committed on purpose: spec 11.8)
+/target/
+**/*.rs.bk
+
+# Node packages (a build tool for the desktop UI only)
+node_modules/
+
+# macOS and Windows clutter
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+*.swp
+
+# Personal AI agent settings (shared rules live in AGENTS.md and CLAUDE.md)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+
+# Local-only working files
+/local/
