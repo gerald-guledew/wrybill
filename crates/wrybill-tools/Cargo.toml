@@ -1,0 +1,12 @@
+[package]
+name = "wrybill-tools"
+description = "Wrybill's hands: shell, files, the system profile, packages, web, browser and the MCP client."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

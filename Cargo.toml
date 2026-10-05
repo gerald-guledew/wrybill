@@ -1,0 +1,42 @@
+# The Wrybill workspace: small crates that share one core (spec 6 and 15.1).
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/wrybill-core",
+    "crates/wrybill-brains",
+    "crates/wrybill-tools",
+    "crates/wrybill-guardian",
+    "crates/wrybill-memory",
+    "crates/wrybill-store",
+    "crates/wrybill-config",
+    "apps/wrybill-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+repository = "https://github.com/gerald-guledew/wrybill"
+# Nothing goes to crates.io yet. This stops it happening by accident.
+publish = false
+
+# Every crate takes these through `[lints] workspace = true`.
+[workspace.lints.rust]
+# No `unsafe` without a comment explaining why, and a test (AGENTS.md, rule 7).
+# A crate that really needs some says so in the open with `#[allow(unsafe_code)]`.
+unsafe_code = "deny"
+
+# One place for dependency versions. Every addition is justified in its commit
+# (AGENTS.md, rule 5), and `Cargo.lock` pins the exact versions.
+[workspace.dependencies]
+# Commands and help for the CLI (spec 14). Built without colour, so output is plain text.
+clap = { version = "4.6.7", default-features = false, features = [
+    "std",
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+    "suggestions",
+] }

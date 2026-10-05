@@ -1,0 +1,12 @@
+[package]
+name = "wrybill-guardian"
+description = "Wrybill's Guardian: tiers, autonomy levels, grants, taint, the command classifier, the sandbox, the audit log and checkpoints."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

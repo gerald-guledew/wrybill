@@ -1,0 +1,20 @@
+[package]
+name = "wrybill-cli"
+description = "The wrybill command line."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The command is always `wrybill`, never shortened (spec 7.5).
+[[bin]]
+name = "wrybill"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+
+[lints]
+workspace = true
