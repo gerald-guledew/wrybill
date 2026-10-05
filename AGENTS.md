@@ -10,6 +10,7 @@ Wrybill is a secure, lightweight, LLM-agnostic, adaptive AI agent for laptops, b
 - Work on one milestone task at a time. Write a short plan and wait for an OK from the person you're working with before writing code.
 - Check `docs/DECISIONS.md` before reopening a settled choice. When a change settles a design question, adds a notable dependency or borrows from another project, propose a line for that file, and keep the licence notices of any borrowed code.
 - Don't edit `docs/SPEC.md` yourself. If something in it looks wrong, unclear or out of date, stop and propose the change.
+- Wrybill's main goal is to make things easy and simple for its user (spec section 1). When a choice comes up, prefer the option where Wrybill works it out itself, asks only for real decisions, and keeps settings optional with sensible defaults.
 
 ## Hard rules
 
