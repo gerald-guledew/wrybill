@@ -1,4 +1,28 @@
 //! Wrybill's config: loading and validation, paths and the keychain
 //! (spec section 13).
 //!
-//! An empty shell for now. The code arrives later in M0.
+//! - [`Paths`] works out where Wrybill keeps its data on this machine.
+//! - [`load`] reads `config.toml` and checks it against spec 13.3. A missing
+//!   file isn't an error: Wrybill starts on built-in defaults.
+//! - [`Config`] is the result: every setting, with its default filled in.
+//!
+//! The keychain arrives later in M0.
+
+mod keyref;
+mod load;
+mod model;
+mod paths;
+mod problem;
+mod reader;
+mod validate;
+
+pub use url::Url;
+
+pub use crate::keyref::{KEYCHAIN_SERVICE, KeyRef, KeyRefError, is_valid_key_name};
+pub use crate::load::{Invalid, LoadError, Loaded, Source, Valid, load, parse};
+pub use crate::model::{
+    Autonomy, Config, CostTier, Defaults, Limits, LocalToCloud, Locality, McpServer, McpTransport,
+    McpTrust, Model, Provider, Role, Routing, Safety, Search, SearchProvider, Storage, ToolCalling,
+};
+pub use crate::paths::{Paths, PathsError, expand_tilde};
+pub use crate::problem::Problem;

@@ -40,3 +40,10 @@ clap = { version = "4.6.7", default-features = false, features = [
     "error-context",
     "suggestions",
 ] }
+# Error types for the library crates (spec 14).
+thiserror = "2.0.21"
+# Reads `config.toml` and keeps the line of every key, so each problem can say
+# where it is (spec 13). Only the parser: no writer and no serde.
+toml = { version = "1.1.6", default-features = false, features = ["std", "parse"] }
+# Checks every URL in the config with a real URL parser (spec 13.3).
+url = "2.5.8"
