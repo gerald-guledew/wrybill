@@ -18,48 +18,73 @@ use crate::model::{
     SearchProvider, Storage, ToolCalling,
 };
 use crate::paths::expand_tilde;
-use crate::reader::{Amount, Item, Place, Report, Section, quoted_list, shown_word};
+use crate::reader::{Amount, Found, Item, Place, Report, Section, quoted_list, shown_word};
 
 /// The file as read: every value that passed its own checks.
+///
+/// It also keeps the lines of the keys that the cross-checks may have to
+/// point at (see [`crate::check`]).
 pub(crate) struct Draft {
-    defaults: Defaults,
+    pub(crate) defaults: DefaultsDraft,
     limits: Limits,
-    routing: Routing,
-    search: Option<SearchDraft>,
+    pub(crate) routing: Routing,
+    /// The line `allow_cloud` is on, when the file sets it.
+    pub(crate) allow_cloud_line: Option<usize>,
+    pub(crate) search: Option<SearchDraft>,
     safety: Safety,
     storage: Storage,
-    models: Vec<ModelDraft>,
-    mcp_servers: Vec<McpDraft>,
+    pub(crate) models: Vec<ModelDraft>,
+    pub(crate) mcp_servers: Vec<McpDraft>,
 }
 
-struct SearchDraft {
-    provider: Option<SearchProvider>,
+pub(crate) struct DefaultsDraft {
+    pub(crate) planner: Option<Found<String>>,
+    pub(crate) worker: Option<Found<String>>,
+    pub(crate) summariser: Option<Found<String>>,
+    autonomy: Autonomy,
+}
+
+pub(crate) struct SearchDraft {
+    /// The line the section starts on.
+    pub(crate) line: usize,
+    /// Whether the section has any key other than `provider`.
+    pub(crate) has_other_keys: bool,
+    /// Whether the file has a `provider` key, valid or not.
+    pub(crate) has_provider: bool,
+    pub(crate) provider: Option<SearchProvider>,
     api_key: Option<KeyRef>,
+    pub(crate) api_key_line: Option<usize>,
     endpoint: Option<Url>,
+    pub(crate) endpoint_line: Option<usize>,
 }
 
-struct ModelDraft {
-    id: Option<String>,
-    provider: Option<Provider>,
+pub(crate) struct ModelDraft {
+    pub(crate) place: Place,
+    pub(crate) id: Option<Found<String>>,
+    pub(crate) provider: Option<Provider>,
     model: Option<String>,
-    roles: Option<Vec<Role>>,
+    pub(crate) roles: Option<Vec<Role>>,
     api_key: Option<KeyRef>,
     endpoint: Option<Url>,
-    locality: Option<Locality>,
+    pub(crate) endpoint_line: Option<usize>,
+    pub(crate) locality: Option<Found<Locality>>,
     tools: Option<ToolCalling>,
     vision: Option<bool>,
     context_window: Option<u64>,
     min_free_ram_gb: Option<f64>,
-    trusted_for_private: bool,
+    pub(crate) min_free_ram_gb_line: Option<usize>,
+    pub(crate) trusted_for_private: bool,
+    pub(crate) trusted_for_private_line: Option<usize>,
     cost_tier: Option<CostTier>,
     price_in_usd_per_mtok: Option<f64>,
     price_out_usd_per_mtok: Option<f64>,
-    enabled: bool,
+    pub(crate) enabled: bool,
     notes: Option<String>,
 }
 
-struct McpDraft {
-    id: Option<String>,
+pub(crate) struct McpDraft {
+    pub(crate) place: Place,
+    pub(crate) id: Option<Found<String>>,
     command: Option<String>,
     args: Vec<String>,
     url: Option<Url>,
@@ -87,19 +112,24 @@ pub(crate) fn read(table: &DeTable<'_>, user_home: Option<&Path>, report: &mut R
 
     let defaults = match top.section("defaults", report) {
         Some(found) => read_defaults(found.value, report),
-        None => Defaults::default(),
+        None => DefaultsDraft {
+            planner: None,
+            worker: None,
+            summariser: None,
+            autonomy: Autonomy::default(),
+        },
     };
     let limits = match top.section("limits", report) {
         Some(found) => read_limits(found.value, report),
         None => Limits::default(),
     };
-    let routing = match top.section("routing", report) {
+    let (routing, allow_cloud_line) = match top.section("routing", report) {
         Some(found) => read_routing(found.value, report),
-        None => Routing::default(),
+        None => (Routing::default(), None),
     };
     let search = top
         .section("search", report)
-        .map(|found| read_search(found.value, report));
+        .map(|found| read_search(found.value, found.line, report));
     let safety = match top.section("safety", report) {
         Some(found) => read_safety(found.value, user_home, report),
         None => Safety::defaults(user_home),
@@ -125,6 +155,7 @@ pub(crate) fn read(table: &DeTable<'_>, user_home: Option<&Path>, report: &mut R
         defaults,
         limits,
         routing,
+        allow_cloud_line,
         search,
         safety,
         storage,
@@ -133,11 +164,12 @@ pub(crate) fn read(table: &DeTable<'_>, user_home: Option<&Path>, report: &mut R
     }
 }
 
-fn read_defaults(mut section: Section<'_>, report: &mut Report) -> Defaults {
+fn read_defaults(mut section: Section<'_>, report: &mut Report) -> DefaultsDraft {
     let mut model_id = |key| {
-        section
-            .filled_text(key, report)
-            .map(|found| found.value.to_owned())
+        section.filled_text(key, report).map(|found| Found {
+            value: found.value.to_owned(),
+            line: found.line,
+        })
     };
     let planner = model_id("planner");
     let worker = model_id("worker");
@@ -148,7 +180,7 @@ fn read_defaults(mut section: Section<'_>, report: &mut Report) -> Defaults {
         .unwrap_or_default();
     section.finish(report);
 
-    Defaults {
+    DefaultsDraft {
         planner,
         worker,
         summariser,
@@ -200,8 +232,11 @@ fn read_limits(mut section: Section<'_>, report: &mut Report) -> Limits {
     }
 }
 
-fn read_routing(mut section: Section<'_>, report: &mut Report) -> Routing {
+/// Reads `[routing]`. The line of `allow_cloud` comes back too, for the
+/// cross-checks.
+fn read_routing(mut section: Section<'_>, report: &mut Report) -> (Routing, Option<usize>) {
     let default = Routing::default();
+    let allow_cloud_line = section.line_of("allow_cloud", report);
     let allow_cloud = section
         .flag("allow_cloud", report)
         .map_or(default.allow_cloud, |found| found.value);
@@ -210,13 +245,19 @@ fn read_routing(mut section: Section<'_>, report: &mut Report) -> Routing {
         .map_or(default.local_to_cloud, |found| found.value);
     section.finish(report);
 
-    Routing {
+    let routing = Routing {
         allow_cloud,
         local_to_cloud,
-    }
+    };
+    (routing, allow_cloud_line)
 }
 
-fn read_search(mut section: Section<'_>, report: &mut Report) -> SearchDraft {
+fn read_search(mut section: Section<'_>, line: usize, report: &mut Report) -> SearchDraft {
+    let has_provider = section.has("provider");
+    let has_other_keys = section.has_keys_other_than("provider");
+    let api_key_line = section.line_of("api_key", report);
+    let endpoint_line = section.line_of("endpoint", report);
+
     let provider = section
         .choice("provider", &SearchProvider::CHOICES, report)
         .map(|found| found.value);
@@ -228,9 +269,14 @@ fn read_search(mut section: Section<'_>, report: &mut Report) -> SearchDraft {
     section.finish(report);
 
     SearchDraft {
+        line,
+        has_other_keys,
+        has_provider,
         provider,
         api_key,
+        api_key_line,
         endpoint,
+        endpoint_line,
     }
 }
 
@@ -382,10 +428,9 @@ fn read_model(mut section: Section<'_>, line: usize, report: &mut Report) -> Mod
     let roles = read_roles(&mut section, report);
     let hosted = provider.filter(|provider| provider.is_hosted());
     let api_key = read_key_ref(&mut section, hosted.map(Provider::as_str), report);
+    let endpoint_line = section.line_of("endpoint", report);
     let endpoint = read_url(&mut section, "endpoint", report);
-    let locality = section
-        .choice("locality", &Locality::CHOICES, report)
-        .map(|found| found.value);
+    let locality = section.choice("locality", &Locality::CHOICES, report);
     if provider == Some(Provider::OpenaiCompatible) {
         require(
             &section,
@@ -410,9 +455,11 @@ fn read_model(mut section: Section<'_>, line: usize, report: &mut Report) -> Mod
     let context_window = section
         .whole("context_window", 1, i64::MAX.unsigned_abs(), report)
         .map(|found| found.value);
+    let min_free_ram_gb_line = section.line_of("min_free_ram_gb", report);
     let min_free_ram_gb = section
         .amount("min_free_ram_gb", Amount::AboveZero, report)
         .map(|found| found.value);
+    let trusted_for_private_line = section.line_of("trusted_for_private", report);
     let trusted_for_private = section
         .flag("trusted_for_private", report)
         .is_some_and(|found| found.value);
@@ -431,21 +478,26 @@ fn read_model(mut section: Section<'_>, line: usize, report: &mut Report) -> Mod
     let notes = section
         .text("notes", report)
         .map(|found| found.value.to_owned());
+    let place = section.place().clone();
     section.finish(report);
 
     ModelDraft {
+        place,
         id,
         provider,
         model,
         roles,
         api_key,
         endpoint,
+        endpoint_line,
         locality,
         tools,
         vision,
         context_window,
         min_free_ram_gb,
+        min_free_ram_gb_line,
         trusted_for_private,
+        trusted_for_private_line,
         cost_tier,
         price_in_usd_per_mtok,
         price_out_usd_per_mtok,
@@ -511,9 +563,11 @@ fn read_mcp_server(mut section: Section<'_>, line: usize, report: &mut Report) -
         }
         None => Vec::new(),
     };
+    let place = section.place().clone();
     section.finish(report);
 
     McpDraft {
+        place,
         id,
         command,
         args,
@@ -531,7 +585,7 @@ fn require(section: &Section<'_>, key: &str, line: usize, why: &str, report: &mu
 }
 
 /// Reads an entry's `id`, and labels the entry with it for later problems.
-fn read_id(section: &mut Section<'_>, report: &mut Report) -> Option<String> {
+fn read_id(section: &mut Section<'_>, report: &mut Report) -> Option<Found<String>> {
     let found = section.filled_text("id", report)?;
     if found
         .value
@@ -542,7 +596,10 @@ fn read_id(section: &mut Section<'_>, report: &mut Report) -> Option<String> {
         return None;
     }
     section.set_label(found.value);
-    Some(found.value.to_owned())
+    Some(Found {
+        value: found.value.to_owned(),
+        line: found.line,
+    })
 }
 
 fn read_roles(section: &mut Section<'_>, report: &mut Report) -> Option<Vec<Role>> {
@@ -691,8 +748,14 @@ fn is_host_label(label: &str) -> bool {
 
 /// Builds the config from a file that had no problems.
 pub(crate) fn build(draft: Draft) -> Config {
+    let model_id = |found: Option<Found<String>>| found.map(|found| found.value);
     Config {
-        defaults: draft.defaults,
+        defaults: Defaults {
+            planner: model_id(draft.defaults.planner),
+            worker: model_id(draft.defaults.worker),
+            summariser: model_id(draft.defaults.summariser),
+            autonomy: draft.defaults.autonomy,
+        },
         limits: draft.limits,
         routing: draft.routing,
         search: draft.search.and_then(build_search),
@@ -733,7 +796,7 @@ fn build_model(draft: ModelDraft) -> Option<Model> {
     let provider = draft.provider?;
     let hosted = provider.is_hosted();
     Some(Model {
-        id: draft.id?,
+        id: draft.id?.value,
         provider,
         model: draft.model?,
         roles: draft.roles,
@@ -747,7 +810,7 @@ fn build_model(draft: ModelDraft) -> Option<Model> {
         locality: if hosted {
             Locality::Cloud
         } else {
-            draft.locality?
+            draft.locality?.value
         },
         tools: draft.tools.unwrap_or(if hosted {
             ToolCalling::Native
@@ -776,7 +839,7 @@ fn build_mcp_server(draft: McpDraft) -> Option<McpServer> {
         _ => return None,
     };
     Some(McpServer {
-        id: draft.id?,
+        id: draft.id?.value,
         transport,
         trust: draft.trust,
         pass_env: draft.pass_env,

@@ -8,6 +8,7 @@
 //!
 //! The keychain arrives later in M0.
 
+mod check;
 mod keyref;
 mod load;
 mod model;
