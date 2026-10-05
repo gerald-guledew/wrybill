@@ -1,0 +1,307 @@
+# Wrybill's CI (M0 brief, item 7; spec 11.8 and 14.1).
+#
+# One commit has to produce a working release binary for every target, and
+# each build proves its own claims here instead of leaving them to trust.
+#
+# Rules for this file:
+# - Only GitHub's own actions, pinned by commit SHA (docs/DECISIONS.md).
+# - The token is read-only, checkout keeps no credentials, and
+#   `pull_request_target` is never used.
+# - Exact runner labels, so a moving "-latest" label can't change a build.
+# - Never set RUSTFLAGS. It would replace the settings in .cargo/config.toml.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  # The supply-chain tools, built from these exact versions. Bump them on purpose.
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_AUDIT_VERSION: "0.22.2"
+
+jobs:
+  checks:
+    name: Format and supply chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      - name: No CPU-specific build flags
+        # Release builds use the baseline x86-64 target (spec 14.1). The
+        # pattern is written so that this file doesn't match itself.
+        run: |
+          if git grep -nE 'target[-_]cpu' -- '.cargo/' '*Cargo.toml' '*build.rs' '.github/'; then
+            echo "::error::A CPU-specific build flag was found. Release builds stay on the baseline target."
+            exit 1
+          fi
+
+      - name: Formatting
+        run: cargo fmt --check
+
+      - name: Restore cargo-deny and cargo-audit
+        id: tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/bin/cargo-audit
+          key: cargo-tools-${{ runner.os }}-${{ runner.arch }}-deny-${{ env.CARGO_DENY_VERSION }}-audit-${{ env.CARGO_AUDIT_VERSION }}
+
+      - name: Build cargo-deny and cargo-audit
+        if: steps.tools.outputs.cache-hit != 'true'
+        run: cargo install --locked "cargo-deny@$CARGO_DENY_VERSION" "cargo-audit@$CARGO_AUDIT_VERSION"
+
+      - name: cargo deny
+        run: cargo deny check
+
+      - name: cargo audit
+        run: cargo audit
+
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            # Intel Mac builds still allow macOS 10.15 (spec 14.1).
+            macos_min: "10.15"
+          - target: aarch64-apple-darwin
+            runner: macos-26
+            macos_min: "11.0"
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            exe: .exe
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            exe: .exe
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    env:
+      TARGET: ${{ matrix.target }}
+      BIN: target/${{ matrix.target }}/release/wrybill${{ matrix.exe }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set the oldest macOS this build has to run on
+        if: runner.os == 'macOS'
+        env:
+          MACOS_MIN: ${{ matrix.macos_min }}
+        run: echo "MACOSX_DEPLOYMENT_TARGET=$MACOS_MIN" >> "$GITHUB_ENV"
+
+      - name: Install the pinned toolchain and the target
+        run: |
+          rustup toolchain install
+          rustup target add "$TARGET"
+
+      - name: No build flags from the environment
+        # RUSTFLAGS would replace .cargo/config.toml, and could name a CPU.
+        run: |
+          for name in RUSTFLAGS CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_RUSTFLAGS; do
+            if [ -n "${!name:-}" ]; then
+              echo "::error::$name is set. Builds use the settings in .cargo/config.toml only."
+              exit 1
+            fi
+          done
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets --target "$TARGET" -- -D warnings
+
+      - name: Tests
+        run: cargo test --locked --target "$TARGET"
+
+      # The musl targets need nothing extra while every dependency is pure
+      # Rust. A crate that compiles C would need `musl-tools` installed here.
+      - name: Release build
+        run: cargo build --release --locked --target "$TARGET"
+
+      # In the proofs below, a tool's output is saved before it's searched. A
+      # pipe into `grep -q` can stop early, and that would hide a match.
+
+      - name: "Proof: the musl binary is fully static"
+        if: endsWith(matrix.target, '-musl')
+        run: |
+          file "$BIN"
+          headers=$(readelf --program-headers "$BIN")
+          if grep -q 'INTERP' <<<"$headers"; then
+            echo "::error::The binary asks for a dynamic loader, so it isn't static."
+            exit 1
+          fi
+          dynamic=$(readelf --dynamic "$BIN")
+          if grep -q '(NEEDED)' <<<"$dynamic"; then
+            echo "::error::The binary needs shared libraries, so it isn't static."
+            exit 1
+          fi
+          echo "No dynamic loader and no shared libraries: static."
+
+      - name: "For the record: the newest glibc the GNU build asks for"
+        if: endsWith(matrix.target, '-gnu')
+        run: |
+          symbols=$(objdump -T "$BIN")
+          grep -oE 'GLIBC_[0-9.]+' <<<"$symbols" | sort -uV | tail -n 1
+
+      - name: "Proof: the Windows binary needs no C runtime DLL"
+        if: runner.os == 'Windows'
+        run: |
+          rustup component add llvm-tools
+          host=$(rustc --version --verbose | sed -n 's/^host: //p')
+          readobj="$(cygpath -u "$(rustc --print sysroot)")/lib/rustlib/$host/bin/llvm-readobj.exe"
+          report=$("$readobj" --coff-imports "$BIN")
+          imports=$(sed -n 's/^ *Name: //p' <<<"$report" | sort -u)
+          echo "DLLs the binary imports:"
+          echo "$imports"
+          if ! grep -qi 'kernel32' <<<"$imports"; then
+            echo "::error::The import table couldn't be read, so this proves nothing."
+            exit 1
+          fi
+          if grep -qiE 'vcruntime|msvcp|ucrtbase|api-ms-win-crt-' <<<"$imports"; then
+            echo "::error::The binary imports a C runtime DLL, so the runtime isn't linked statically."
+            exit 1
+          fi
+          echo "No C runtime DLL among them: the runtime is linked statically."
+
+      - name: "Proof: the oldest macOS the binary allows"
+        if: runner.os == 'macOS'
+        env:
+          EXPECTED: ${{ matrix.macos_min }}
+        run: |
+          commands=$(otool -l "$BIN")
+          minos=$(awk '$1 == "minos" { print $2; exit }' <<<"$commands")
+          echo "The binary allows macOS $minos and newer. Expected: $EXPECTED."
+          test "$minos" = "$EXPECTED"
+
+      - name: Smoke run
+        run: |
+          "$BIN" --version
+          "$BIN" --help
+
+      - name: Package
+        run: |
+          mkdir -p "dist/wrybill-$TARGET"
+          cp "$BIN" LICENSE NOTICE "dist/wrybill-$TARGET/"
+          tar -czf "wrybill-$TARGET.tar.gz" -C dist "wrybill-$TARGET"
+          ls -l "wrybill-$TARGET.tar.gz"
+
+      - name: Upload the binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          # A tar uploaded as it is keeps the executable bit. A zipped upload wouldn't.
+          path: wrybill-${{ matrix.target }}.tar.gz
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+  old-linux:
+    # The static binaries have to run on systems older than the one they were
+    # built on. Ubuntu 22.04 is the oldest that GitHub still hosts.
+    #
+    # GitHub removes these two runners on 17 April 2027, and fails jobs on
+    # them in "brownouts" from 23 March 2027. Before 23 March 2027, delete
+    # this job and take it out of `all-checks-passed` below.
+    name: Static ${{ matrix.target }} on ${{ matrix.runner }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-musl
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - name: Fetch the binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wrybill-${{ matrix.target }}.tar.gz
+
+      - name: Run it
+        run: |
+          archive=$(find . -name "wrybill-$TARGET.tar.gz" -type f -print -quit)
+          tar -xzf "$archive"
+          glibc=$(ldd --version)
+          echo "This runner's C library: $(head -n 1 <<<"$glibc")"
+          "wrybill-$TARGET/wrybill" --version
+
+  pre-avx:
+    # Release builds have to run on any 64-bit x86 chip (spec 5 and 14.1).
+    # Every 2015 MacBook has AVX2, so real test laptops can't show this. QEMU
+    # can: it runs the static binary as a baseline chip and as a pre-AVX one.
+    name: Baseline and pre-AVX x86-64 chips
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Fetch the binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wrybill-x86_64-unknown-linux-musl.tar.gz
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends qemu-user
+
+      - name: Run it as older chips
+        run: |
+          archive=$(find . -name 'wrybill-x86_64-unknown-linux-musl.tar.gz' -type f -print -quit)
+          tar -xzf "$archive"
+          for cpu in qemu64 Nehalem; do
+            echo "--- as a $cpu chip ---"
+            qemu-x86_64 -cpu "$cpu" wrybill-x86_64-unknown-linux-musl/wrybill --version
+          done
+
+  all-checks-passed:
+    # The one check for branch protection to require.
+    name: All checks passed
+    if: always()
+    needs: [checks, build, old-linux, pre-avx]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::At least one job didn't succeed."
+              exit 1
+            fi
+          done
