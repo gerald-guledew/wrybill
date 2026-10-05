@@ -28,6 +28,8 @@ Wrybill is an adaptive AI agent for your computer: a secure, lightweight, LLM-ag
 
 You give Wrybill an instruction through a command line or a desktop app. It works out what machine it's on and what the job needs, installs and configures anything that's missing, runs and tests things, opens a browser, and searches the web. When a job is big enough, it splits the work across helper agents. It learns from experience so it gets better over time, and it knows what's safe to do on its own, what to avoid, and when to stop and check with you first.
 
+**The main goal:** make things easy and simple for the person using it. Wrybill works things out for itself, asks only when a decision is really yours, and keeps every setting optional, with a sensible default you can change.
+
 **The promise:** Wrybill's brain is a setting, not a dependency. Take every cloud model out of the config, point Wrybill at a local model, and it still works, limited only by what that model can do. Adding a new model that speaks a protocol Wrybill already supports is a config change, never a code change.
 
 **Who it's for:** Anyone who wants a capable, adaptive, careful, self-improving agent. Wrybill is open source (Apache-2.0).
@@ -109,7 +111,7 @@ These facts shape the design. They were checked on 1 October 2026, and section 2
 | Using a model never changes it. | Wrybill learns by writing down experience and feeding the relevant parts back in. Memory is readable, grows by small checked edits, and bad lessons are easy to remove (section 12). |
 | Brains can be wrong, and they can be tricked: prompt injection, the "lethal trifecta" (private data, untrusted content and outside communication in one agent) and malicious skills or installs are all real. | Safety rules live in code, not in the brain's judgement. Everything Wrybill reads is data, never instructions, and installs come from trusted sources only (section 11). |
 | macOS 12, the newest version a 2015 MacBook Air or Pro can run, hasn't had security updates since July 2024. Windows 10 consumer security updates end on 12 October 2027, with enrolment. | Wrybill runs on these machines but warns once (11.13). For old laptops, a current Linux distribution is the safest home. |
-| Rust still supports Intel macOS 10.12 and newer (as a Tier 2 target). macOS 26 is the last release for Intel Macs, and GitHub's hosted Intel Mac build machines go away around late 2027. | The core is Rust (section 6). Intel Mac builds are pinned and tested on real hardware, under the support policy in 14.1. |
+| Rust still supports Intel macOS 10.12 and newer (as a Tier 2 target). macOS 26 is the last release for Intel Macs, so GitHub's hosted Intel Mac build machines will go away with its macOS 26 image, which has no end date yet. Its macOS 15 Intel image retires in late 2027. | The core is Rust (section 6). Intel Mac builds are pinned and tested on real hardware, under the support policy in 14.1. |
 | Chrome 136 and later ignore remote-debugging switches on the default profile. Chrome 151 and later need macOS 13. Firefox supports macOS 10.15 and newer, and is driven through WebDriver BiDi rather than CDP. | Wrybill's browser always uses its own profile. It has two backends: CDP for Chromium browsers, and WebDriver BiDi for Firefox, which is what 2015 Macs use (10.4). |
 | Ollama needs macOS 14 or newer, and it can serve cloud models through the same `localhost` address as local ones. | 2015 Macs run local models through llama.cpp's server. Wrybill checks where a model really runs instead of trusting its address (8.3, 11.15). |
 | When an agent asks permission for everything, people stop reading and click yes. | Autonomy levels, task-scoped approvals and an OS sandbox keep approval prompts few and worth reading (11.2, 11.3). |
@@ -213,7 +215,7 @@ Tasks move through these states: **queued**, **running**, **waiting** (for an ap
 | `wrybill init` | Guided first-run setup: detects the machine and any local model servers, helps add keys and models, then runs probes |
 | `wrybill doctor` | Print the system profile and check the setup: which parts work on this machine, which protection is active, and disk used by checkpoints, trash, transcripts and logs |
 | `wrybill models` | List brains, with `probe` (test what they can really do), `check` (are model IDs still valid?) and `scan` (find models on local servers and offer to add them) |
-| `wrybill keys set <provider>` | Store an API key in the OS keychain |
+| `wrybill keys set <provider>` | Store an API key in the OS keychain. Models and search from that provider then find it by name, with no config line needed |
 | `wrybill tasks`, `wrybill resume <task-id>` | List tasks; resume an interrupted one |
 | `wrybill log`, `wrybill log --network`, `wrybill log verify` | Read the audit log; list every connection Wrybill made for a task; check nobody has tampered with it |
 | `wrybill undo [task-id]` | Reverse a task's file changes |
@@ -260,7 +262,7 @@ Default local endpoints: Ollama `http://127.0.0.1:11434/v1`, LM Studio `http://1
 
 Every model has a profile built in three layers, and the router trusts the later layers more:
 
-1. **Declared** in the config (section 13): the **roles** it's meant for (`planner`, `worker`, `summariser`, `vision`), **tools** (`native`, `prompted` or `none`), **vision**, **context_window**, **locality** (`cloud`, `lan` or `local`), **min_free_ram_gb** for local models, and prices or a cost tier.
+1. **Declared** in the config (section 13), most of it optional: the **roles** it's meant for (`planner`, `worker`, `summariser`), **tools** (`native`, `prompted` or `none`), **vision**, **context_window**, **locality** (`cloud`, `lan` or `local`), **min_free_ram_gb** for local models, and prices or a cost tier. Nobody should have to research a model before adding it, so whatever the config leaves out, Wrybill works out itself, from sensible defaults and the next two layers.
 2. **Probed** by `wrybill models probe`, which runs a few cheap checks. Is the model reachable? Does a native tool call round-trip correctly? Does it follow a JSON Schema? Does it accept an image? What context size does the server really allow? Where does it really run (a name Ollama tags as `cloud` is treated as cloud, whatever the address says)? For local servers it also checks how many requests the server runs at once, and whether running several at once is actually faster than one at a time. Probes rerun whenever the model, the server version or the config changes.
 3. **Measured** from evals and real tasks: success rate, retries, time and cost per kind of task, recorded against the exact model, quantisation and server version.
 
@@ -372,6 +374,7 @@ Every task gets default limits from the config (steps, time, tokens and spend), 
 - Built at start-up from `sysinfo`, plus quick checks for package managers (Homebrew, winget, Scoop, apt, dnf, pacman), runtimes (git, Python, Node, Java, Docker and so on), browsers, CPU features (such as AVX2, which matters for local model servers), internet connectivity, and whether the OS still gets security updates.
 - Cached with a timestamp, and refreshed after installs or once a day. The brain gets a short summary and can ask for the full profile.
 - The connectivity check uses what the OS reports about the network. It sends no requests to third-party sites.
+- The security-updates answer is one of four: supported, supported with a condition (for example Windows 10, which needs Extended Security Updates enrolment), out of support since a given date, or unknown. It comes from a table built into each release and is shown with the date that table was checked. An entry with a published end date becomes out of support once that date has passed. Once the table is more than a year old, anything it still lists as supported, with or without a condition, is reported as unknown.
 - Offline? Wrybill says so, sticks to local and LAN brains, and switches off web tools until the connection is back.
 - Wrybill records which parts work on this machine: the core, the desktop app, local inference, each browser backend and the sandbox. A missing part only switches off the tools that need it; the CLI, history and setup always work.
 
@@ -385,7 +388,7 @@ Every task gets default limits from the config (steps, time, tokens and spend), 
 
 ### 10.5 Web search
 
-- Searches go through a search API set in the config (candidates: Brave Search, Exa, Tavily, or a self-hosted SearXNG), so search works with every brain, local ones included.
+- Searches go through a search API set in the config (candidates: Brave Search, Exa, Tavily, or a self-hosted SearXNG), so search works with every brain, local ones included. Setting it up is guided: Wrybill explains the choices in plain words, so nobody has to know these services beforehand.
 - Provider-side tools (a cloud brain's own web search, page fetching or code execution) run on the provider's servers, out of the Guardian's sight. They're off by default; if the user turns one on, using it counts as outside communication under 11.7.
 - All results are marked untrusted, and reports cite their sources.
 
@@ -465,7 +468,7 @@ Some Deny rules are **hard** and can't be relaxed in the config: sending secrets
 
 ### 11.6 Credentials, secrets and test logins
 
-- API keys live in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service) through the `keyring` crate. The config only holds references to them, like `keychain:wrybill/anthropic`. On a headless Linux machine with no secret service, an `env:VARIABLE_NAME` reference works too, with a warning.
+- API keys live in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service) through the `keyring` crate. The config only holds references to them, like `keychain:wrybill/anthropic`. An `env:VARIABLE_NAME` reference is accepted too, on every OS. It's meant for machines where no keychain can be reached (a headless Linux server, a container, CI or an SSH session), and `wrybill doctor` warns wherever one is used.
 - Tool output and files are scanned for known secret patterns (API keys, private keys, tokens) and redacted before anything reaches a brain or the log. Pattern matching can miss things, so this is a backstop, not the main defence.
 - Commands and MCP servers run with a minimal environment.
 - **Testing the user's own apps (R10).** On local development hosts only (`localhost`, `127.0.0.1`, `[::1]`, `*.localhost` and `*.test`), Wrybill may type test credentials that come from the project's own seed, fixture or example files, or that the user gives it for that task, plus a payment provider's published test card numbers in test mode. Never a real password for any other service, and never a live key. Wrybill's code checks the host itself; text on a page claiming "this is a test site" doesn't count.
@@ -631,15 +634,29 @@ Skills and saved strategies only use existing tools, through the Guardian, so th
 
 ### 13.1 Location and rules
 
-- `~/.wrybill/config.toml` on macOS and Linux, and `%USERPROFILE%\.wrybill\config.toml` on Windows. Setting `WRYBILL_HOME` moves the whole folder, which is handy for a portable or test setup.
+- `~/.wrybill/config.toml` on macOS and Linux, and `%USERPROFILE%\.wrybill\config.toml` on Windows. Setting `WRYBILL_HOME` to an absolute path moves the whole folder, which is handy for a portable or test setup.
 - Validated at start-up, with clear and specific error messages. Contradictions (say, `allow_cloud = false` when only cloud models can plan) are errors, not warnings. Section 13.3 lists every key and check.
 - A missing config file isn't an error. Wrybill starts on built-in defaults.
-- The agent's tools can never write to it (section 11.1). Commands the user runs themselves (`wrybill init`, `wrybill models scan`, `wrybill keys set`) and the desktop app's settings screen can.
-- API keys are stored with `wrybill keys set <provider>`, which saves them in the OS keychain. The key is typed at a hidden prompt or piped in, never passed as an argument, so it stays out of shell history and process lists.
+- The agent's tools can never write to it (section 11.1). Commands the user runs themselves (`wrybill init`, `wrybill models scan`) and the desktop app's settings screen can.
+- API keys are stored with `wrybill keys set <provider>`, which saves them in the OS keychain. Wrybill then finds the key by the provider's name, so the config needs no line for it. Another name works too, for a second key, and the config points to it with `keychain:wrybill/<name>`. Names use lowercase letters, digits, `-` and `_`. The key is typed at a hidden prompt or piped in, never passed as an argument, so it stays out of shell history and process lists.
 - Model IDs and limits change often. `wrybill models check` compares configured model IDs with each provider's model list, where one exists, and warns when one is no longer valid.
 - Changes apply to new tasks and new steps, never to a call already in flight.
+- The `WRYBILL_LOG` environment variable sets the level of Wrybill's own log: `error`, `warn`, `info` (the default), `debug` or `trace`.
 
 ### 13.2 Example
+
+The smallest useful config is one model. Wrybill finds the key saved by `wrybill keys set anthropic` and works out the rest itself (8.3):
+
+```toml
+version = 1
+
+[[models]]
+id = "claude"
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+```
+
+The full example shows every section and option:
 
 ```toml
 # ~/.wrybill/config.toml
@@ -668,6 +685,7 @@ local_to_cloud = "ask"                   # "ask" or "never"
 [search]
 provider = "brave"                       # or "exa", "tavily", "searxng"
 api_key = "keychain:wrybill/brave"
+# endpoint = "http://127.0.0.1:8888"     # only for "searxng"; this is its default
 
 [safety]
 workspace_roots = ["~/Wrybill/workspaces", "~/Projects"]
@@ -685,7 +703,7 @@ retention_max_gb = 2
 id = "claude-sonnet"
 provider = "anthropic"
 model = "claude-sonnet-5-5"
-api_key = "keychain:wrybill/anthropic"
+api_key = "keychain:wrybill/anthropic"   # optional: this is where Wrybill looks anyway
 roles = ["planner", "worker"]
 tools = "native"
 vision = true
@@ -773,37 +791,37 @@ pass_env = []                            # environment variables this server may
 
 ### 13.3 Keys, defaults and checks
 
-The example in 13.2 shows every section. A missing key isn't an error: its default applies. An unknown key is an error that names the key, so a typo can't quietly switch something off.
+The full example in 13.2 shows every section. A missing key isn't an error: its default applies. An unknown key is an error that names the key, so a typo can't quietly switch something off.
 
 | Key | Values | Default |
 |---|---|---|
 | `version` | `1`. Anything else is an error | Required when the file exists |
-| `[defaults]` `planner`, `worker`, `summariser` | The `id` of a model that lists that role | None. Wrybill points the user to `wrybill init` when a task needs one |
+| `[defaults]` `planner`, `worker`, `summariser` | The `id` of a model. If that model lists roles, this one must be among them | None. Wrybill picks from the models it has (8.4), and points the user to `wrybill init` when there are none |
 | `[defaults]` `autonomy` | `"plan"`, `"ask"` or `"auto"` | `"ask"` |
 | `[limits]` `max_parallel_cloud_helpers` | A whole number, 1 or more | 3 |
 | `[limits]` `max_parallel_calls_per_local_server` | A whole number, 1 or more. An upper limit for each local or LAN server (9.4) | 4 |
-| `[limits]` `max_helper_depth` | `1`. A higher value is an error in v1 | 1 |
-| `[limits]` `max_steps_per_task`, `max_minutes_per_task`, `max_tokens_per_task`, `max_spend_usd_per_task` | Positive numbers | 60, 30, 2,000,000 and 2.00 |
-| `[routing]` `allow_cloud` | `true` or `false` | `true` |
+| `[limits]` `max_helper_depth` | `1`. Any other value is an error in v1 | 1 |
+| `[limits]` `max_steps_per_task`, `max_minutes_per_task`, `max_tokens_per_task`, `max_spend_usd_per_task` | Whole numbers, 1 or more, for steps, minutes and tokens. Any amount above 0 for spend | 60, 30, 2,000,000 and 2.00 |
+| `[routing]` `allow_cloud` | `true` or `false`. `false` allows only local brains and LAN brains marked `trusted_for_private` | `true` |
 | `[routing]` `local_to_cloud` | `"ask"` or `"never"` | `"ask"` |
-| `[search]` `provider`, `api_key` | `"brave"`, `"exa"`, `"tavily"` or `"searxng"`, and a key reference | None. `web.search` stays off until a provider is set |
-| `[safety]` `workspace_roots` | Folder paths | `["~/Wrybill/workspaces"]` |
+| `[search]` `provider`, `api_key`, `endpoint` | `provider` is `"brave"`, `"exa"`, `"tavily"` or `"searxng"`, and is needed when the section has any other key. `api_key` is a key reference for the first three, and defaults to `keychain:wrybill/<provider>`. `endpoint` is a URL for `"searxng"` only (an error with the others), and defaults to SearXNG's usual local address, `http://127.0.0.1:8888` | None. `web.search` stays off until a provider is set |
+| `[safety]` `workspace_roots` | Folder paths, absolute once `~` is expanded. They needn't exist yet | `["~/Wrybill/workspaces"]` |
 | `[safety]` `trusted_install_domains` | Domain names | Empty |
 | `[safety]` `dev_hosts` | Host patterns | The five in the example |
 | `[safety]` `warn_on_unsupported_os` | `true` or `false` | `true` |
-| `[storage]` `retention_days`, `retention_max_gb` | Positive numbers | 30 and 2 |
+| `[storage]` `retention_days`, `retention_max_gb` | A whole number of days, 1 or more, and a size above 0 | 30 and 2 |
 
 | `[[models]]` key | Values | Needed |
 |---|---|---|
 | `id` | A unique name | Always |
 | `provider` | `"anthropic"`, `"openai"`, `"gemini"`, `"openrouter"` or `"openai-compatible"` | Always |
 | `model` | The provider's or server's name for the model | Always |
-| `roles` | Any of `"planner"`, `"worker"`, `"summariser"` and `"vision"` | Always |
-| `api_key` | `keychain:wrybill/<name>` or `env:VARIABLE_NAME`, never the key itself | For the four hosted providers |
-| `endpoint` | A URL | For `openai-compatible` |
+| `roles` | One or more of `"planner"`, `"worker"` and `"summariser"` | Optional. When it's missing, Wrybill decides what to use the model for (8.3) |
+| `api_key` | `keychain:wrybill/<name>` or `env:VARIABLE_NAME`, never the key itself | Optional. For the four hosted providers it defaults to `keychain:wrybill/<provider>`, the key saved by `wrybill keys set <provider>` |
+| `endpoint` | A URL | For `openai-compatible`. An error on a hosted provider |
 | `locality` | `"cloud"`, `"lan"` or `"local"` | For `openai-compatible`. Hosted providers are always `"cloud"` |
 | `tools` | `"native"`, `"prompted"` or `"none"` | Optional. Default `"native"` for hosted providers and `"prompted"` otherwise |
-| `vision` | `true` or `false` | Optional. Default `false` |
+| `vision` | `true` or `false`: whether the model accepts images | Optional. Worked out by a probe when missing |
 | `context_window` | Tokens | Optional. Probed when missing |
 | `min_free_ram_gb` | A number | Optional. Local models only |
 | `trusted_for_private` | `true` or `false` | Optional. Default `false`. LAN models only |
@@ -811,18 +829,18 @@ The example in 13.2 shows every section. A missing key isn't an error: its defau
 | `enabled` | `true` or `false` | Optional. Default `true` |
 | `notes` | Free text | Optional |
 
-An `[[mcp_servers]]` entry needs a unique `id` and either a `command` (with optional `args`) for a local server or a `url` for a remote one. `trust` is `"ask"` (the default) or `"allow"`, and `pass_env` defaults to empty.
+An `[[mcp_servers]]` entry needs a unique `id` and either a `command` (with optional `args`) for a local server or a `url` for a remote one. `trust` is `"ask"` (the default) or `"allow"`, and `pass_env` defaults to empty. Every URL in the config (an `endpoint` or an MCP server's `url`) uses `http` or `https`, names a host and carries no username or password.
 
-These are errors at start-up:
+As well as anything that breaks a rule in the tables above, these are errors at start-up:
 
-- A `[defaults]` entry names a model that doesn't exist or doesn't list that role.
-- `allow_cloud = false` when the only models that can plan are cloud models.
+- A `[defaults]` entry names a model that doesn't exist, is disabled, lists roles that don't include that one, or is ruled out by `allow_cloud = false`.
+- `allow_cloud = false` when the only enabled models that can plan are ones it rules out: cloud models, and LAN models that aren't `trusted_for_private`. A model with no `roles` line counts as able to plan.
 - Two models, or two MCP servers, share an `id`.
 - A hosted provider is marked `"local"` or `"lan"`, or a cloud model is marked `trusted_for_private`.
 - An `api_key` holds a key instead of a reference.
 - An MCP server has both `command` and `url`, or neither.
 
-Having no models at all isn't an error; it's the first-run state. The key that relaxes a default Deny rule (11.4) is defined with the Guardian in M1.
+Two misplaced keys are only warnings: `min_free_ram_gb` on a model that isn't local, and `trusted_for_private` on a local one. Having no models at all isn't an error; it's the first-run state. The key that relaxes a default Deny rule (11.4) is defined with the Guardian in M1.
 
 ## 14. Technology stack in detail
 
@@ -857,13 +875,13 @@ Pin exact versions in `Cargo.lock`, pin the toolchain in `rust-toolchain.toml`, 
 |---|---|---|---|
 | macOS | `x86_64-apple-darwin` and `aarch64-apple-darwin`, shipped as one universal app | macOS 11 Big Sur and newer. Intel builds use `MACOSX_DEPLOYMENT_TARGET=10.15` (Tauri's minimum; Rust's own is 10.12) | Covers every 2015 MacBook on its newest supported macOS. Test on a real 2015 Mac before each release |
 | Windows | `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc` | Windows 10 and 11 | WebView2 is preinstalled on Windows 10 version 1803 and later; the installer fetches it if it's missing. PowerShell 5.1 is the baseline |
-| Linux | `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, with the CLI also as static `musl` builds for both | CLI: any modern distribution. Desktop app: needs WebKitGTK 4.1 (for example Ubuntu 22.04 or Debian 12 and newer) | The friendliest option for old laptops |
+| Linux | `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, with the CLI also as static `musl` builds for both | CLI: any modern distribution, through the static build. GNU builds and the desktop app: Ubuntu 24.04, Debian 13 or newer (the app needs WebKitGTK 4.1) | The friendliest option for old laptops |
 
 - **CPU baseline:** release builds use the default x86-64 target, with no AVX or AVX2 requirement. Never build releases with `target-cpu=native`.
-- **Binaries:** the CLI ships as one binary per target; the universal macOS build is for the desktop app. Windows builds link the C runtime statically, so nothing else needs installing. Linux GNU builds are made on the oldest Ubuntu LTS that GitHub still hosts, and the static `musl` CLI covers older systems.
+- **Binaries:** the CLI ships as one binary per target; the universal macOS build is for the desktop app. Windows builds link the C runtime statically, so nothing else needs installing. Linux GNU builds are made on Ubuntu 24.04, so they need Ubuntu 24.04, Debian 13 or newer. The static `musl` CLI covers older systems, and an old laptop can run a current Linux.
 - **64-bit only.** 32-bit Windows, Windows 7 and 8.1, macOS 10.x and ChromeOS aren't supported.
 - **Tools can need a newer OS than Wrybill.** On 2015 Macs, Ollama (needs macOS 14) and current Chrome (needs macOS 13) won't run, so Wrybill uses llama.cpp's server and Firefox there.
-- **Intel Mac policy.** Intel Mac builds are supported for as long as current Rust and Apple tools can build and test them, reviewed at every release. GitHub's hosted Intel Mac build machines go away around late 2027, after which Intel builds are cross-compiled on Apple Silicon and tested under Rosetta (fully available through macOS 27) and on the real 2015 test Mac. When that stops being practical, we announce an end date, and 2015 Macs remain supported through Linux.
+- **Intel Mac policy.** Intel Mac builds are supported for as long as current Rust and Apple tools can build and test them, reviewed at every release. When GitHub's hosted Intel Mac build machines go away (section 5), Intel builds are cross-compiled on Apple Silicon and tested under Rosetta (fully available through macOS 27) and on the real 2015 test Mac. When that stops being practical, we announce an end date, and 2015 Macs remain supported through Linux.
 - **Signing** comes in the release milestone: an Apple Developer ID with notarisation for macOS, and a code-signing certificate for Windows. That keeps security warnings to a minimum, though Windows SmartScreen can still warn about a new certificate until it builds a reputation.
 
 ## 15. Repository and file layout
@@ -927,7 +945,7 @@ wrybill/
 ├── skills/          saved recipes (Agent Skills format)
 ├── prompts/         approved prompt and strategy versions
 ├── wrybill.db       task store, search index, run history, routing stats
-├── logs/            Wrybill's own logs; audit/ holds one hash-chained JSONL file per day
+├── logs/            Wrybill's own logs, one wrybill-YYYY-MM-DD.jsonl file per UTC day; audit/ holds one hash-chained JSONL file per day
 ├── transcripts/     redacted task transcripts, kept for debugging
 ├── checkpoints/     file snapshots for undo
 ├── trash/           deleted files, restorable
@@ -1074,7 +1092,7 @@ Checked on 1 October 2026.
 - [Windows 10 Extended Security Updates (Microsoft)](https://www.microsoft.com/en-us/windows/extended-security-updates)
 - [Microsoft quietly extends free Windows 10 ESU support to October 2027 (BleepingComputer)](https://www.bleepingcomputer.com/news/microsoft/microsoft-quietly-extends-free-windows-10-esu-support-to-october-2027/)
 - [Apple begins Rosetta's final phase as the Intel Mac era winds down (TechRepublic)](https://www.techrepublic.com/article/news-apple-macos-27-drops-intel-mac-support-rosetta/)
-- [GitHub Actions: macOS 13 runner image is closing down (GitHub)](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/): Intel macOS runners end with the macOS 15 image in late 2027
+- [GitHub Actions: macOS 13 runner image is closing down (GitHub)](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/) and [GitHub's runner images](https://github.com/actions/runner-images#available-images): the macOS 15 Intel image retires in late 2027, and a macOS 26 Intel image is available
 - [Changes to remote debugging switches to improve security (Chrome for Developers)](https://developer.chrome.com/blog/remote-debugging-port)
 - [Chrome system requirements (Google)](https://support.google.com/chrome/a/answer/7100626?hl=en): macOS 13 minimum
 - [Google Chrome 151 to drop support for macOS 12 Monterey (9to5Mac)](https://9to5mac.com/2026/01/12/google-chrome-151-to-drop-support-for-macos-12-monterey/)
