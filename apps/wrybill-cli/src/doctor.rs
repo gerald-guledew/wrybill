@@ -388,7 +388,13 @@ fn check_logs(paths: &Paths) -> LogsCheck {
     };
 
     let (mut files, mut bytes) = (0_usize, 0_u64);
-    for about in entries.flatten().filter_map(|entry| entry.metadata().ok()) {
+    // Each file is asked about by its path. On Windows, what the folder's
+    // own list says about a file can be out of date while the file is open,
+    // and today's log is open right now: this run is writing to it.
+    for about in entries
+        .flatten()
+        .filter_map(|entry| std::fs::metadata(entry.path()).ok())
+    {
         if about.is_file() {
             files += 1;
             bytes = bytes.saturating_add(about.len());

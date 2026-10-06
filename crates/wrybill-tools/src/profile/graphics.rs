@@ -185,9 +185,9 @@ fn maker_of(id: &str) -> Option<&'static str> {
         "10de" => "NVIDIA",
         "1002" | "1022" => "AMD",
         "106b" => "Apple",
-        "1414" => "Microsoft (a virtual machine)",
-        "15ad" => "VMware (a virtual machine)",
-        "1af4" | "1234" | "1b36" => "QEMU (a virtual machine)",
+        "1414" => "a Microsoft virtual machine",
+        "15ad" => "a VMware virtual machine",
+        "1af4" | "1234" | "1b36" => "a QEMU virtual machine",
         _ => return None,
     })
 }
@@ -317,6 +317,23 @@ mod tests {
                 "NVIDIA (nvidia driver)",
                 "vc4-drm driver"
             ]
+        );
+    }
+
+    #[test]
+    fn a_virtual_machines_card_is_named_as_one() {
+        let folder = test_folder("graphics-linux-vm");
+        // What GitHub's Linux runners report.
+        add_card(
+            folder.path(),
+            "card0",
+            Some("0x1414\n"),
+            Some("DRIVER=hyperv_drm\n"),
+        );
+
+        assert_eq!(
+            from_linux_cards(folder.path()),
+            ["a Microsoft virtual machine (hyperv_drm driver)"]
         );
     }
 
