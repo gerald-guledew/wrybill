@@ -87,6 +87,17 @@ fn real_keychain_keys_set_saves_a_piped_key_and_shows_it_nowhere() {
         assert!(!text.contains("MARKER"), "the key is in {place}:\n{text}");
     }
 
+    // Only Wrybill's own events are in the log. On Linux the keychain client
+    // writes events of its own at this level, and none of them may get in.
+    for line in log.lines() {
+        let event: serde_json::Value = serde_json::from_str(line).expect("each log line is JSON");
+        let target = event["target"].as_str().expect("where the event came from");
+        assert!(
+            target == "wrybill" || target.starts_with("wrybill_"),
+            "an event from another crate is in the log:\n{line}"
+        );
+    }
+
     // Another program (this test) can tell the key is there without reading
     // it. That's what `wrybill doctor` does, so it mustn't prompt.
     assert_eq!(Keychain.has(&name), Ok(true));

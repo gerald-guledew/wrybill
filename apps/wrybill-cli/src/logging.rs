@@ -4,8 +4,11 @@
 //! (spec 15.2). It stays on this computer: Wrybill has no telemetry
 //! (spec 11.15).
 //!
-//! Only Wrybill's own events are written. What other crates log isn't picked
-//! up, so nothing a library decides to print can end up in the file.
+//! Only Wrybill's own events are written: the ones from a crate named
+//! `wrybill` or `wrybill_*`. What other crates log is dropped at every level,
+//! so nothing a library decides to print can end up in the file. Some
+//! libraries do log: the Linux keychain client writes events about the
+//! messages it sends.
 
 use std::fs::{DirBuilder, File, OpenOptions};
 use std::io;
@@ -14,6 +17,8 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tracing::{Level, Subscriber};
+use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::layer::SubscriberExt;
 use wrybill_config::Paths;
 
 /// The environment variable that sets the log's level (spec 13.1).
@@ -100,8 +105,10 @@ fn create_private_folder(folder: &Path) -> io::Result<()> {
     builder.create(folder)
 }
 
-/// A subscriber that writes each event at `level` or above to `file`, as one
-/// JSON object per line.
+/// A subscriber that writes each of Wrybill's own events at `level` or above
+/// to `file`, as one JSON object per line.
+///
+/// Events from any other crate are dropped, whatever their level.
 pub fn subscriber(file: File, level: Level) -> impl Subscriber + Send + Sync + 'static {
     tracing_subscriber::fmt()
         .json()
@@ -111,6 +118,16 @@ pub fn subscriber(file: File, level: Level) -> impl Subscriber + Send + Sync + '
         .with_max_level(level)
         .with_writer(Mutex::new(file))
         .finish()
+        .with(filter_fn(|metadata| is_wrybills_own(metadata.target())))
+}
+
+/// Whether an event's target, which says where it comes from, names one of
+/// Wrybill's own crates. A target starts with the crate's name, and Wrybill's
+/// crates are `wrybill` (the command itself) and `wrybill_*` (AGENTS.md,
+/// rule 9).
+fn is_wrybills_own(target: &str) -> bool {
+    let crate_name = target.split("::").next().unwrap_or(target);
+    crate_name == "wrybill" || crate_name.starts_with("wrybill_")
 }
 
 /// Starts the log for this run of the command.
@@ -174,10 +191,36 @@ mod tests {
 
     use tracing::Level;
 
-    use super::{UnknownLevel, level_from, utc_date};
+    use super::{UnknownLevel, is_wrybills_own, level_from, utc_date};
 
     fn date_at(seconds: u64) -> (u64, u64, u64) {
         utc_date(UNIX_EPOCH + Duration::from_secs(seconds))
+    }
+
+    #[test]
+    fn only_events_from_wrybills_own_crates_count_as_its_own() {
+        for target in [
+            "wrybill",
+            "wrybill_cli",
+            "wrybill_cli::doctor",
+            "wrybill_config::load",
+            "wrybill_tools::profile::run",
+        ] {
+            assert!(is_wrybills_own(target), "{target}");
+        }
+        for target in [
+            "",
+            "zbus",
+            "zbus::connection",
+            "tokio::runtime",
+            // Names that only look like Wrybill's.
+            "wrybillish",
+            "wrybillish::thing",
+            "not_wrybill_cli",
+            "other::wrybill_cli",
+        ] {
+            assert!(!is_wrybills_own(target), "{target}");
+        }
     }
 
     #[test]

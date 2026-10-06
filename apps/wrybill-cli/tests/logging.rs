@@ -9,6 +9,11 @@ use tracing::Level;
 use wrybill_cli::logging::{self, Logging};
 use wrybill_config::Paths;
 
+/// Where the events in these tests say they come from: one of Wrybill's own
+/// crates. The log drops events from anywhere else, and that includes this
+/// test file, which is a crate of its own.
+const OWN: &str = "wrybill_cli::tests";
+
 /// Noon on 5 October 2026, in UTC.
 fn noon() -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(1_791_201_600)
@@ -80,8 +85,8 @@ fn opening_the_log_creates_the_data_folder_and_the_file() {
 #[test]
 fn each_event_is_one_json_object_on_its_own_line() {
     let lines = lines_logged("json-lines", Level::INFO, || {
-        tracing::info!(command = "doctor", steps = 3, "started");
-        tracing::warn!("something to look at");
+        tracing::info!(target: OWN, command = "doctor", steps = 3, "started");
+        tracing::warn!(target: OWN, "something to look at");
     });
 
     assert_eq!(lines.len(), 2);
@@ -100,8 +105,8 @@ fn each_event_is_one_json_object_on_its_own_line() {
 #[test]
 fn events_below_the_level_are_left_out() {
     let lines = lines_logged("level-info", Level::INFO, || {
-        tracing::debug!("detail");
-        tracing::info!("kept");
+        tracing::debug!(target: OWN, "detail");
+        tracing::info!(target: OWN, "kept");
     });
 
     let messages: Vec<&Value> = lines.iter().map(|line| &line["message"]).collect();
@@ -111,13 +116,39 @@ fn events_below_the_level_are_left_out() {
 #[test]
 fn a_lower_level_lets_more_through() {
     let lines = lines_logged("level-debug", Level::DEBUG, || {
-        tracing::trace!("too much");
-        tracing::debug!("detail");
-        tracing::info!("kept");
+        tracing::trace!(target: OWN, "too much");
+        tracing::debug!(target: OWN, "detail");
+        tracing::info!(target: OWN, "kept");
     });
 
     let messages: Vec<&Value> = lines.iter().map(|line| &line["message"]).collect();
     assert_eq!(messages, ["detail", "kept"]);
+}
+
+#[test]
+fn what_another_crate_logs_is_left_out_at_every_level() {
+    // Everything is let through, down to the finest level.
+    let lines = lines_logged("other-crates", Level::TRACE, || {
+        // As the Linux keychain client does, about a message it has read.
+        tracing::trace!(
+            target: "zbus::connection",
+            detail = "something only the library should see",
+            "Message received on the socket"
+        );
+        tracing::warn!(target: "zbus", "Failed to remove match rule");
+        // This test file isn't one of Wrybill's crates either.
+        tracing::error!("from the test file itself");
+        // A name that only starts like one of Wrybill's.
+        tracing::info!(target: "wrybillish::thing", "not Wrybill's");
+
+        tracing::trace!(target: OWN, "kept");
+        // The command itself is a crate called `wrybill`.
+        tracing::info!(target: "wrybill", "kept too");
+    });
+
+    let messages: Vec<&Value> = lines.iter().map(|line| &line["message"]).collect();
+    assert_eq!(messages, ["kept", "kept too"]);
+    assert_eq!(lines[0]["target"], OWN);
 }
 
 #[test]
@@ -127,7 +158,7 @@ fn a_second_run_on_the_same_day_adds_to_the_file() {
     for message in ["first run", "second run"] {
         let (file, _) = logging::open(&paths, noon()).expect("a log file");
         tracing::subscriber::with_default(logging::subscriber(file, Level::INFO), || {
-            tracing::info!("{message}");
+            tracing::info!(target: OWN, "{message}");
         });
     }
 
