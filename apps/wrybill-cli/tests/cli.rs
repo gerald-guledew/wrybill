@@ -221,3 +221,150 @@ fn a_data_folder_that_cannot_be_used_gets_a_note_and_the_command_carries_on() {
     );
     assert_eq!(output.status.code(), Some(2));
 }
+
+// `wrybill doctor`, run for real on whatever machine the tests are on. What
+// it prints depends on that machine, so these check the parts that don't.
+
+/// Words that can be a user's or a computer's name and are also in what
+/// doctor prints, so finding them proves nothing.
+const EVERYDAY_WORDS: [&str; 16] = [
+    "aarch64",
+    "admin",
+    "apple",
+    "arm64",
+    "debian",
+    "fedora",
+    "home",
+    "intel",
+    "linux",
+    "local",
+    "localhost",
+    "macos",
+    "ubuntu",
+    "user",
+    "windows",
+    "x86_64",
+];
+
+#[test]
+fn doctor_runs_on_the_built_in_defaults_when_there_is_no_config() {
+    let folder = data_folder("doctor-defaults");
+
+    let output = wrybill(&folder, &["doctor"]);
+    let text = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{text}");
+    let first_line = text.lines().next().unwrap_or_default();
+    assert!(
+        first_line.starts_with(concat!("wrybill ", env!("CARGO_PKG_VERSION"), " (")),
+        "{first_line}"
+    );
+    // Whatever line the layout wrapped it onto.
+    let flowed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flowed.contains("so Wrybill is using its built-in defaults."),
+        "{text}"
+    );
+    for part in [
+        "\nSetup\n",
+        "\nThis computer\n",
+        "\nInstalled\n",
+        "\nThe profile took ",
+    ] {
+        assert!(text.contains(part), "{part:?} isn't in:\n{text}");
+    }
+    // Plain text: no colour and no symbols.
+    assert!(text.is_ascii(), "{text}");
+    for line in text.lines() {
+        assert!(line.len() <= 78, "{} characters: {line}", line.len());
+    }
+    // Like every command that does something, it keeps a log of the run.
+    assert!(log(&folder).contains("\"command\":\"doctor\""));
+}
+
+#[test]
+fn doctor_reports_an_invalid_config_then_still_prints_the_profile() {
+    let folder = data_folder("doctor-invalid-config");
+    fs::create_dir_all(&folder).expect("the data folder");
+    fs::write(
+        folder.join("config.toml"),
+        format!(
+            "version = 1\n[[models]]\nid = \"claude\"\nprovider = \"anthropic\"\nmodel = \"x\"\napi_key = \"{MARKER}\"\n"
+        ),
+    )
+    .expect("the config file");
+
+    let output = wrybill(&folder, &["doctor"]);
+    let text = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(1), "{text}");
+    assert!(text.contains("Problem. "), "{text}");
+    assert!(text.contains("- line 6: "), "{text}");
+    assert!(text.contains("\nThis computer\n"), "{text}");
+    assert!(
+        log(&folder).contains("\"config\":\"invalid\""),
+        "{}",
+        log(&folder)
+    );
+    // The key that was pasted into the config is in none of it.
+    assert_the_key_is_nowhere(&output, &folder);
+}
+
+#[test]
+fn doctor_with_a_data_folder_that_cannot_be_used_says_so_and_exits_with_1() {
+    // WRYBILL_HOME isn't a full path, so there's no config to find and
+    // nowhere to keep a log.
+    let output = Command::new(env!("CARGO_BIN_EXE_wrybill"))
+        .arg("doctor")
+        .env("WRYBILL_HOME", "not-a-full-path")
+        .output()
+        .expect("the wrybill binary should start");
+    let text = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(1), "{text}");
+    assert!(
+        stderr(&output).starts_with("Note: Wrybill isn't keeping a log of this run."),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        text.contains("Problem. WRYBILL_HOME must be the full path of a"),
+        "{text}"
+    );
+    assert!(text.contains("\nThis computer\n"), "{text}");
+}
+
+#[test]
+fn what_doctor_prints_names_neither_the_computer_nor_its_user() {
+    let folder = data_folder("doctor-names-nobody");
+
+    let output = wrybill(&folder, &["doctor"]);
+    let text = stdout(&output).to_lowercase();
+
+    let user = ["USER", "USERNAME", "LOGNAME"]
+        .iter()
+        .find_map(|name| std::env::var(name).ok());
+    let computer = Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        // `sams-laptop.local` is still `sams-laptop`.
+        .map(|name| name.trim().split('.').next().unwrap_or_default().to_owned());
+    for (what, name) in [("the user's name", user), ("the computer's name", computer)] {
+        let Some(name) = name.map(|name| name.to_lowercase()) else {
+            continue;
+        };
+        // A very short name, or an everyday word, would be found by chance.
+        if name.len() < 4 || EVERYDAY_WORDS.contains(&name.as_str()) {
+            continue;
+        }
+        assert!(!text.contains(&name), "{what} is in what doctor printed");
+    }
+
+    // No path either: not the home folder's, and not the data folder's.
+    let home = std::env::home_dir().map(|home| home.to_string_lossy().to_lowercase());
+    let data = folder.to_string_lossy().to_lowercase();
+    for path in home.into_iter().chain([data]) {
+        assert!(!text.contains(&path), "a path is in what doctor printed");
+    }
+}

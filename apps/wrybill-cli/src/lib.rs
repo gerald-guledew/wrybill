@@ -4,6 +4,7 @@
 //! happens in the shared crates (spec 7.2). It's a library as well as a
 //! binary, so its pieces can be tested without starting a process.
 
+pub mod doctor;
 pub mod keys;
 pub mod logging;
 
@@ -33,6 +34,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Print the system profile and check the setup
+    ///
+    /// The output names no computer, user or network address, and never
+    /// shows a key, so it's safe to paste into a public issue.
+    Doctor,
+
     /// Save the API keys Wrybill uses
     #[command(subcommand_required = true, arg_required_else_help = true)]
     Keys {
@@ -79,6 +86,10 @@ pub fn run() -> ExitCode {
     };
 
     let status = match command {
+        Command::Doctor => {
+            start_log(&mut io::stderr());
+            doctor::run(&Keychain, &mut io::stdout())
+        }
         Command::Keys {
             command: KeysCommand::Set { provider, extra },
         } => {

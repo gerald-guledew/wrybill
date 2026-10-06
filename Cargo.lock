@@ -1717,6 +1717,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wrybill-config",
+ "wrybill-tools",
 ]
 
 [[package]]

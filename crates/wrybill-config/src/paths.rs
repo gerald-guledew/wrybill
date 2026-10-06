@@ -78,6 +78,14 @@ impl Paths {
         &self.data_folder
     }
 
+    /// Whether the data folder is where it is by default: `.wrybill` in the
+    /// user's home folder.
+    pub fn data_folder_is_default(&self) -> bool {
+        self.user_home
+            .as_ref()
+            .is_some_and(|home| self.data_folder == home.join(DATA_FOLDER_NAME))
+    }
+
     /// Where the config file is, whether or not it exists.
     pub fn config_file(&self) -> PathBuf {
         self.data_folder.join(CONFIG_FILE_NAME)
@@ -142,6 +150,26 @@ mod tests {
         assert_eq!(paths.config_file(), full("home/sam/.wrybill/config.toml"));
         assert_eq!(paths.logs_folder(), full("home/sam/.wrybill/logs"));
         assert_eq!(paths.user_home(), Some(full("home/sam").as_path()));
+    }
+
+    #[test]
+    fn the_data_folder_knows_whether_it_was_moved() {
+        let home = full("home/sam");
+        let by_default = Paths::resolve(None, Some(home.clone())).expect("paths");
+        let moved_inside_home = Paths::resolve(
+            Some(OsString::from(full("home/sam/projects/wrybill-data"))),
+            Some(home.clone()),
+        )
+        .expect("paths");
+        let moved_elsewhere =
+            Paths::resolve(Some(OsString::from(full("data/wrybill"))), Some(home)).expect("paths");
+        let with_no_home =
+            Paths::resolve(Some(OsString::from(full("data/wrybill"))), None).expect("paths");
+
+        assert!(by_default.data_folder_is_default());
+        assert!(!moved_inside_home.data_folder_is_default());
+        assert!(!moved_elsewhere.data_folder_is_default());
+        assert!(!with_no_home.data_folder_is_default());
     }
 
     #[test]

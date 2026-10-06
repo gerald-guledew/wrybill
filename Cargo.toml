@@ -33,6 +33,7 @@ unsafe_code = "deny"
 [workspace.dependencies]
 # Wrybill's own crates.
 wrybill-config = { path = "crates/wrybill-config" }
+wrybill-tools = { path = "crates/wrybill-tools" }
 
 # Other people's crates.
 # Commands and help for the CLI (spec 14). Built without colour, so output is plain text.

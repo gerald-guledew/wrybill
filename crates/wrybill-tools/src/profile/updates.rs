@@ -97,7 +97,7 @@ pub enum SecurityUpdates {
     },
     /// It does, but only when a condition is met.
     SupportedIf {
-        /// The condition, worded to follow "supported, but".
+        /// The condition, worded to follow "gets security updates".
         condition: &'static str,
         /// The last day of updates, when the vendor has published one.
         until: Option<Date>,

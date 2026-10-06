@@ -25,6 +25,7 @@ rpassword.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 wrybill-config.workspace = true
+wrybill-tools.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
