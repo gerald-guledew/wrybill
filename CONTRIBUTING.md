@@ -4,12 +4,12 @@ Kia ora, and thanks for stopping by! Wrybill is an adaptive AI agent for the lap
 
 ## Where things stand
 
-Wrybill is in its early days. The design is in [docs/SPEC.md](docs/SPEC.md), and the first milestone is next (see its brief, [docs/milestones/M0.md](docs/milestones/M0.md)). There's no release yet, so the most useful help right now is:
+Wrybill is in its early days. The design is in [docs/SPEC.md](docs/SPEC.md), and the first milestone has laid the foundations (see its brief, [docs/milestones/M0.md](docs/milestones/M0.md)). There's no release yet, so the most useful help right now is:
 
 - **Reading the spec** and opening an issue when something looks wrong, unclear or missing. Fresh eyes catch the most.
 - **Sharing what you need an agent to do.** Real jobs become evals (section 18.1 of the spec), and evals decide what "works" means.
-- **Offering test hardware.** A 2015 MacBook, a Windows 10 laptop or an old ThinkPad running Linux is gold for checking that Wrybill stays light (section 17).
-- **Code**, once M0 lands. Look for issues labelled `good first issue`.
+- **Offering test hardware.** A 2015 MacBook, a Windows 10 laptop or an old ThinkPad running Linux is gold for checking that Wrybill stays light (section 17). [docs/compatibility.md](docs/compatibility.md) says how to run `wrybill doctor` on it and send in what it prints.
+- **Code.** Look for issues labelled `good first issue`.
 
 ## Before you start
 
@@ -23,11 +23,11 @@ Wrybill is in its early days. The design is in [docs/SPEC.md](docs/SPEC.md), and
 
 You'll need:
 
-- **Rust** through [rustup](https://rustup.rs). From M0, the repo pins the exact toolchain in `rust-toolchain.toml`, so rustup picks it up for you.
+- **Rust** through [rustup](https://rustup.rs). The repo pins the exact toolchain in `rust-toolchain.toml`, so rustup picks it up for you.
 - **cargo-deny**, installed once with `cargo install --locked cargo-deny`.
 - **A current Node.js LTS release** only if you're working on the desktop app's interface (from M7). Node is a build tool here; Wrybill never needs it at runtime.
 
-Once M0 has set up the workspace, every change must pass these before review:
+Every change must pass these before review:
 
 ```sh
 cargo fmt --check
@@ -35,6 +35,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 cargo deny check
 ```
+
+CI runs the same four, then `cargo audit`, and builds and tests every target in section 14.1.
 
 Tests never call live model APIs. Use the mock brain and recorded fixtures instead (section 18).
 

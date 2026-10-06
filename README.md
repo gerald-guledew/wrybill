@@ -7,7 +7,7 @@
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-b7410e)
 ![Made in New Zealand](https://img.shields.io/badge/made%20in-New%20Zealand-000000)
 
-> **Early days.** Wrybill is being designed and built in the open, and there's nothing to install yet. The design is in [docs/SPEC.md](docs/SPEC.md), and the first milestone (M0) is next.
+> **Early days.** Wrybill is being designed and built in the open, and there's nothing to install yet. The design is in [docs/SPEC.md](docs/SPEC.md). The first milestone (M0) has laid the foundations: the `wrybill` command builds for macOS, Windows and Linux, and `wrybill doctor` reports on the computer it runs on. The agent itself starts with M1.
 
 Wrybill is being built as a secure, lightweight, open-source AI agent that learns and improves, with the ability to create and coordinate multiple agents to get work done. Tell it what you need, and it will work out what your computer has, set up what's missing, run and test things, use the browser and the web, and learn from each job so the next one goes better. It's designed to work with whichever LLM you give it, from a local LLM to Claude, ChatGPT or Gemini, and to ask before doing anything risky.
 
@@ -62,8 +62,8 @@ It's early, which is the best time to shape a project.
 - **Star or watch** the repo to follow progress.
 - **Read the spec** and open an issue if something looks wrong, unclear or missing.
 - **Tell us what you'd use it for.** Real jobs become the evals that decide what "works" means.
-- **Test on old hardware.** A 2015 MacBook or a Windows 10 laptop makes a great test bench.
-- **Write code** once M0 lands. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Test on old hardware.** A 2015 MacBook or a Windows 10 laptop makes a great test bench. [docs/compatibility.md](docs/compatibility.md) says how to run `wrybill doctor` on yours and send in what it prints.
+- **Write code.** Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 NZ developers, this one's made here, so we'd especially love to hear from you. Everyone's welcome, wherever you are.
 
