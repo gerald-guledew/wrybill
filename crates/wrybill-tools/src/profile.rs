@@ -207,21 +207,19 @@ impl TestFolder {
 #[cfg(test)]
 impl Drop for TestFolder {
     fn drop(&mut self) {
+        // Only this test's own folder. Tests run at the same time, so
+        // nothing they share may be removed here: another test could be
+        // creating its folder inside it at that very moment.
         let _ = std::fs::remove_dir_all(&self.0);
-        // The folder the tests share goes too, once it's empty.
-        if let Some(shared) = self.0.parent() {
-            let _ = std::fs::remove_dir(shared);
-        }
     }
 }
 
-/// A folder for the test called `test`, inside the OS's folder for temporary
-/// files. It doesn't exist yet.
+/// A folder for the test called `test`, straight inside the OS's folder for
+/// temporary files, and shared with no other test. It doesn't exist yet.
 #[cfg(test)]
 pub(crate) fn test_folder(test: &str) -> TestFolder {
-    let folder = std::env::temp_dir()
-        .join(format!("wrybill-tools-tests-{}", std::process::id()))
-        .join(test);
+    let folder =
+        std::env::temp_dir().join(format!("wrybill-tools-test-{}-{test}", std::process::id()));
     // Left over from an earlier run, if it's there at all.
     let _ = std::fs::remove_dir_all(&folder);
     TestFolder(folder)
