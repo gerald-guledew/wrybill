@@ -56,16 +56,15 @@ You're welcome to use Claude Code, Codex CLI, Gemini CLI or any other coding age
 
 A few expectations:
 
-- **You're responsible for every line you submit.** Read it, run it, and be ready to explain it.
-- **Say which agent helped** in your pull request description. It helps reviewers know what to look for.
+- **You're responsible for every line you submit, including those produced with AI assistance.** Read it, run it, and be ready to explain it.
 - **Keep secrets out of prompts.** Never paste API keys or private data into an agent session.
-- **For Guardian changes,** have a coding agent that didn't write the change review the diff against the spec before you open the pull request. The maintainer gives the second review.
+- **For Guardian changes,** carefully review the diff against the spec yourself, with the help of a coding agent that didn't write the change, before you open the pull request. The maintainer gives the second review.
 
 ## Pull requests
 
 - Keep each pull request to one thing, with small commits and clear messages.
 - Fill in the pull request template: what changed, which spec sections it touches, and how you tested it.
-- Changes to the Guardian need red-team tests and two reviews before they merge: one by a coding agent that didn't write the change, and one by the maintainer.
+- Changes to the Guardian need red-team tests and two reviews before they merge: one by you, with the help of a coding agent that didn't write the change, and one by the maintainer.
 - Never present a target from the spec as a measured result. If you measured something, include the numbers and the machine.
 
 ## Writing style

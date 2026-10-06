@@ -18,6 +18,5 @@
 
 - [ ] `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` and `cargo deny check` pass
 - [ ] No secrets, personal data or machine-specific paths
-- [ ] Any Guardian change has red-team tests, a review by a coding agent that didn't write it, and the maintainer's review (or this doesn't touch the Guardian)
+- [ ] Any Guardian change has red-team tests, my own review with the help of a coding agent that didn't write it, and the maintainer's review (or this doesn't touch the Guardian)
 - [ ] Docs and user-facing text use English
-- [ ] Coding agent used, if any: <!-- for example Claude Code, Codex CLI, Gemini CLI, or none -->

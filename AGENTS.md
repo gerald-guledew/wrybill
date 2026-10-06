@@ -61,8 +61,7 @@ docs/                      SPEC.md, DECISIONS.md, milestones/, compatibility.md,
 - Keep commits small and reviewable, with clear messages.
 - Report what you tested, what you didn't, and anything in the spec that looks wrong.
 - Never present a target as a measured result.
-- Guardian changes need two reviews before merging: one by a coding agent that didn't write the change, and one by the maintainer.
-- Pull requests say which coding agent helped write them (see CONTRIBUTING.md).
+- Guardian changes need two reviews before merging: one by the contributor (the person you're working with), with the help of a coding agent that didn't write the change, and one by the maintainer.
 
 ## Writing style
 
