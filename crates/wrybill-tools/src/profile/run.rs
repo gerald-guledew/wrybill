@@ -6,8 +6,8 @@
 //!
 //! - an argument list, never a shell;
 //! - a time limit, after which the program is stopped;
-//! - a neutral working folder, so nothing in the user's current folder can
-//!   change the answer;
+//! - a neutral working folder, the top of the disk, so nothing in the folder
+//!   the user is in, or in any project, can change the answer;
 //! - no input, and a cap on how much output is kept;
 //! - the user's own environment, so version managers keep working.
 
@@ -139,15 +139,37 @@ pub(super) fn run(program: &Path, args: &[&str], limit: Duration) -> Result<Ran,
     })
 }
 
-/// A folder where nothing the user is working on can affect a program: the
-/// OS's folder for temporary files, or failing that the top of the disk.
+/// A folder where nothing anyone is working on can affect a program: the top
+/// of the disk the OS is on. That's `/`, or on Windows a folder such as
+/// `C:\`.
+///
+/// No folder is above it, so a version manager that looks upwards for a
+/// project's settings finds none, and only an administrator can put a file
+/// there.
+///
+/// It isn't the folder for temporary files. That one follows `TMPDIR`, which
+/// can point into a project, and on Linux it's usually `/tmp`, where every
+/// user of the computer can leave files.
 fn neutral_folder() -> PathBuf {
-    let temporary = std::env::temp_dir();
-    if temporary.is_dir() {
-        temporary
-    } else {
-        PathBuf::from(std::path::MAIN_SEPARATOR_STR)
+    #[cfg(windows)]
+    {
+        // `SystemRoot` is where Windows itself is installed, such as
+        // `C:\Windows`.
+        if let Some(top) = top_of_the_disk(std::env::var_os("SystemRoot").as_deref()) {
+            return top;
+        }
     }
+    // `/`. On Windows this is the top of the current drive, for a Windows
+    // that doesn't say where it's installed.
+    PathBuf::from(std::path::MAIN_SEPARATOR_STR)
+}
+
+/// The top of the disk that `folder` is on. `None` unless `folder` is a full
+/// path on a disk that's there.
+#[cfg(any(windows, test))]
+fn top_of_the_disk(folder: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let top = Path::new(folder?).ancestors().last()?;
+    (top.is_absolute() && top.is_dir()).then(|| top.to_path_buf())
 }
 
 /// The start of what a program wrote to one of its streams, read on a thread
@@ -201,10 +223,11 @@ impl Kept {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
 
-    use super::{Job, MOST_OUTPUT, RunError, run, run_all};
+    use super::{Job, MOST_OUTPUT, RunError, neutral_folder, run, run_all, top_of_the_disk};
 
     /// The name of the helper below, as the test harness knows it.
     const HELPER: &str = "profile::run::tests::helper";
@@ -294,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn a_program_runs_in_a_neutral_folder_not_the_current_one() {
+    fn a_program_runs_at_the_top_of_the_disk_not_in_the_current_folder() {
         let ran = run_helper("where", PLENTY).expect("the helper should run");
         let here = std::env::current_dir().expect("a current folder");
 
@@ -303,7 +326,42 @@ mod tests {
             .lines()
             .find_map(|line| line.strip_prefix("in:"))
             .expect("the helper says where it ran");
-        assert_ne!(Path::new(reported), here);
+        let reported = Path::new(reported);
+        assert_ne!(reported, here);
+        // No folder is above it, so it can't be inside anybody's project.
+        assert!(reported.is_absolute(), "{}", reported.display());
+        assert_eq!(reported.parent(), None, "{}", reported.display());
+    }
+
+    #[test]
+    fn the_neutral_folder_does_not_follow_the_folder_for_temporary_files() {
+        let neutral = neutral_folder();
+
+        // `TMPDIR`, or `TEMP` on Windows, can point anywhere, even into a
+        // project. The neutral folder is never that folder.
+        assert_ne!(neutral, std::env::temp_dir());
+        assert!(neutral.is_dir(), "{}", neutral.display());
+        // On macOS and Linux it's the same on every computer.
+        #[cfg(unix)]
+        assert_eq!(neutral, Path::new("/"));
+    }
+
+    #[test]
+    fn the_top_of_a_disk_is_only_found_from_a_full_path() {
+        let here = std::env::current_dir().expect("a current folder");
+
+        let top = top_of_the_disk(Some(here.as_os_str())).expect("the top of this disk");
+        assert_eq!(top.parent(), None, "{}", top.display());
+        assert!(here.starts_with(&top), "{}", top.display());
+
+        for not_a_full_path in ["", "Windows", "some/folder"] {
+            assert_eq!(
+                top_of_the_disk(Some(OsStr::new(not_a_full_path))),
+                None,
+                "{not_a_full_path:?}"
+            );
+        }
+        assert_eq!(top_of_the_disk(None), None);
     }
 
     #[test]
