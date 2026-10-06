@@ -14,7 +14,12 @@
 //! - **Windows.** Microsoft publishes the last day of updates for each
 //!   version, and those dates are used as they are. They differ between the
 //!   Home and Pro editions and the Enterprise and Education ones. Server,
-//!   LTSC and IoT editions aren't in the table.
+//!   LTSC and IoT editions aren't in the table. A build number that isn't a
+//!   released version, such as a preview build, isn't in it either.
+//!
+//!   Microsoft's lifecycle pages give each end as a moment in UTC, early on
+//!   the day after. The table holds the day itself, which is always a
+//!   Tuesday.
 //!
 //! The pages it was checked against:
 //!
@@ -24,6 +29,8 @@
 //! - <https://learn.microsoft.com/en-us/lifecycle/products/windows-11-home-and-pro>
 //! - <https://learn.microsoft.com/en-us/lifecycle/products/windows-11-enterprise-and-education>
 //! - <https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro>
+//! - <https://learn.microsoft.com/en-us/windows/release-health/release-information>
+//!   (the build number of each Windows 10 version)
 //! - <https://www.microsoft.com/en-us/windows/extended-security-updates>
 //!
 //! When you update the table, update [`TABLE_CHECKED`] too.
@@ -67,9 +74,9 @@ const WINDOWS_10_22H2: u32 = 19_045;
 /// The day the Extended Security Updates programme for Home and Pro ends.
 const WINDOWS_10_ESU_ENDS: Date = Date::new(2027, 10, 12);
 
-/// Older Windows 10 versions, Home and Pro: the build number and the last
-/// day of updates.
-const OLDER_WINDOWS_10: [(u32, Date); 4] = [
+/// Every older Windows 10 version, Home and Pro: the build number and the
+/// last day of updates.
+const OLDER_WINDOWS_10: [(u32, Date); 13] = [
     // 21H2
     (19_044, Date::new(2023, 6, 13)),
     // 21H1
@@ -78,14 +85,25 @@ const OLDER_WINDOWS_10: [(u32, Date); 4] = [
     (19_042, Date::new(2022, 5, 10)),
     // 2004
     (19_041, Date::new(2021, 12, 14)),
+    // 1909
+    (18_363, Date::new(2021, 5, 11)),
+    // 1903
+    (18_362, Date::new(2020, 12, 8)),
+    // 1809
+    (17_763, Date::new(2020, 11, 10)),
+    // 1803
+    (17_134, Date::new(2019, 11, 12)),
+    // 1709
+    (16_299, Date::new(2019, 4, 9)),
+    // 1703
+    (15_063, Date::new(2018, 10, 9)),
+    // 1607
+    (14_393, Date::new(2018, 4, 10)),
+    // 1511
+    (10_586, Date::new(2017, 10, 10)),
+    // 1507, the first Windows 10
+    (10_240, Date::new(2017, 5, 9)),
 ];
-
-/// The first build of Windows 10.
-const FIRST_WINDOWS_10_BUILD: u32 = 10_240;
-
-/// The last day of updates for Windows 10, version 1909. Every version before
-/// it lost its updates earlier.
-const WINDOWS_10_1909_ENDED: Date = Date::new(2021, 5, 11);
 
 /// Whether an OS still gets security updates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,8 +124,6 @@ pub enum SecurityUpdates {
     OutOfSupport {
         /// The last day it got them.
         since: Date,
-        /// `true` when the real day is this one or an earlier one.
-        or_earlier: bool,
     },
     /// Wrybill can't tell.
     Unknown(WhyUnknown),
@@ -155,8 +171,6 @@ enum Entry {
     UntilIf(Date, &'static str),
     /// Out of support. Its last security update was on this day.
     Ended(Date),
-    /// Out of support since this day or an earlier one.
-    EndedBy(Date),
 }
 
 /// The two groups of Windows editions that the table has dates for.
@@ -186,20 +200,10 @@ fn answer(entry: Entry, today: u64) -> SecurityUpdates {
     let table_is_too_old = today > TABLE_CHECKED.days_since_1970() + TABLE_GOOD_FOR_DAYS;
 
     match entry {
-        Entry::Ended(since) => SecurityUpdates::OutOfSupport {
-            since,
-            or_earlier: false,
-        },
-        Entry::EndedBy(since) => SecurityUpdates::OutOfSupport {
-            since,
-            or_earlier: true,
-        },
+        Entry::Ended(since) => SecurityUpdates::OutOfSupport { since },
         // A published end date holds however old the table is.
         Entry::Until(end) | Entry::UntilIf(end, _) if today > end.days_since_1970() => {
-            SecurityUpdates::OutOfSupport {
-                since: end,
-                or_earlier: false,
-            }
+            SecurityUpdates::OutOfSupport { since: end }
         }
         _ if table_is_too_old => SecurityUpdates::Unknown(WhyUnknown::TableTooOld),
         Entry::Open => SecurityUpdates::Supported { until: None },
@@ -251,22 +255,18 @@ fn windows_entry(build: u32, product: &str) -> Option<Entry> {
 
     // Windows 10. Its Enterprise and Education editions have their own
     // programme for extended updates, which the table doesn't cover.
-    if edition != Edition::HomeOrPro || build < FIRST_WINDOWS_10_BUILD {
+    if edition != Edition::HomeOrPro {
         return None;
     }
     if build == WINDOWS_10_22H2 {
         return Some(Entry::UntilIf(WINDOWS_10_ESU_ENDS, ESU_CONDITION));
     }
-    if let Some((_, ended)) = OLDER_WINDOWS_10
+    // Only the builds that were released versions. Anything between them,
+    // such as a preview build, isn't in the table, so it's "unknown".
+    let (_, ended) = OLDER_WINDOWS_10
         .iter()
-        .find(|(known_build, _)| *known_build == build)
-    {
-        return Some(Entry::Until(*ended));
-    }
-    if build < WINDOWS_10_22H2 {
-        return Some(Entry::EndedBy(WINDOWS_10_1909_ENDED));
-    }
-    None
+        .find(|(known_build, _)| *known_build == build)?;
+    Some(Entry::Until(*ended))
 }
 
 /// Works out which group of editions a Windows product name belongs to.
@@ -311,7 +311,6 @@ mod tests {
     fn out_since(year: u16, month: u8, day: u8) -> SecurityUpdates {
         SecurityUpdates::OutOfSupport {
             since: Date::new(year, month, day),
-            or_earlier: false,
         }
     }
 
@@ -441,16 +440,49 @@ mod tests {
             windows(19_041, "Windows 10 Home", today),
             out_since(2021, 12, 14)
         );
-        // Version 1909 and everything before it.
-        for build in [18_363, 17_763, 10_240] {
-            assert_eq!(
-                windows(build, "Windows 10 Home", today),
-                SecurityUpdates::OutOfSupport {
-                    since: Date::new(2021, 5, 11),
-                    or_earlier: true,
-                },
+        // Version 1909, version 1809, and the first Windows 10 of all.
+        assert_eq!(
+            windows(18_363, "Windows 10 Home", today),
+            out_since(2021, 5, 11)
+        );
+        assert_eq!(
+            windows(17_763, "Windows 10 Pro", today),
+            out_since(2020, 11, 10)
+        );
+        assert_eq!(
+            windows(10_240, "Windows 10 Home", today),
+            out_since(2017, 5, 9)
+        );
+    }
+
+    #[test]
+    fn every_released_windows_10_version_is_in_the_table() {
+        // Each build number on Microsoft's Windows 10 release page.
+        let released = [
+            10_240, 10_586, 14_393, 15_063, 16_299, 17_134, 17_763, 18_362, 18_363, 19_041, 19_042,
+            19_043, 19_044, 19_045,
+        ];
+        for build in released {
+            assert_ne!(
+                windows(build, "Windows 10 Home", checked_day()),
+                SecurityUpdates::Unknown(WhyUnknown::NotInTable),
                 "{build}"
             );
+        }
+    }
+
+    #[test]
+    fn a_windows_10_build_that_was_never_a_released_version_is_unknown() {
+        // Preview builds between two versions, and numbers just outside the
+        // table. Nothing is guessed for them.
+        for build in [19_040, 18_900, 17_000, 12_000, 10_239, 19_046, 21_390] {
+            for product in ["Windows 10 Home", "Windows 10 Pro"] {
+                assert_eq!(
+                    windows(build, product, checked_day()),
+                    SecurityUpdates::Unknown(WhyUnknown::NotInTable),
+                    "{build} {product}"
+                );
+            }
         }
     }
 

@@ -730,11 +730,8 @@ fn updates_lines(updates: SecurityUpdates, family: OsFamily) -> Vec<String> {
             lines.push(checked);
             lines
         }
-        SecurityUpdates::OutOfSupport { since, or_earlier } => vec![
-            format!(
-                "Warning. Out of support: no security updates since {since}{}.",
-                if or_earlier { " or earlier" } else { "" }
-            ),
+        SecurityUpdates::OutOfSupport { since } => vec![
+            format!("Warning. Out of support: no security updates since {since}."),
             "Next: update the OS if this computer can run a newer one. For an old laptop, a current Linux distribution is the safest home."
                 .to_owned(),
             checked,

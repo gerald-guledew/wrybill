@@ -256,7 +256,6 @@ fn bare_old_mac() -> Report {
             },
             security_updates: SecurityUpdates::OutOfSupport {
                 since: Date::new(2024, 7, 29),
-                or_earlier: false,
             },
             chip: Chip {
                 name: Some("Intel(R) Core(TM) i5-5250U CPU @ 1.60GHz".to_owned()),
@@ -626,10 +625,9 @@ fn the_other_answers_about_security_updates_read_like_this() {
     );
     assert!(
         with(SecurityUpdates::OutOfSupport {
-            since: Date::new(2021, 5, 11),
-            or_earlier: true
+            since: Date::new(2021, 5, 11)
         })
-        .contains("Warning. Out of support: no security updates since 11 May 2021 or earlier.")
+        .contains("Warning. Out of support: no security updates since 11 May 2021.")
     );
     assert!(
         with(SecurityUpdates::Unknown(WhyUnknown::NotInTable))
