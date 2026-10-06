@@ -53,7 +53,8 @@ keyring = "4.2.0"
 keyring-core = "1.0.0"
 # The hidden prompt in `wrybill keys set`, on all three OSes.
 rpassword = "7.5.4"
-# Reads log lines back in tests. Already in the tree through JSON logging.
+# Reads the JSON that macOS gives for its graphics chips, and log lines in
+# tests. Already in the tree through JSON logging.
 serde_json = "1.0.151"
 # What the OS reports about the computer: its version, chip, memory and disks
 # (spec 10.3). Only those two parts: no thread pool, and nothing that lists

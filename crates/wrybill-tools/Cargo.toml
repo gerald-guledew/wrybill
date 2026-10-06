@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+serde_json.workspace = true
 sysinfo.workspace = true
 
 [lints]

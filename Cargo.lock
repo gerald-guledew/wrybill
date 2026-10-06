@@ -1750,6 +1750,7 @@ version = "0.1.0"
 name = "wrybill-tools"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "sysinfo",
 ]
 

@@ -1,18 +1,24 @@
-//! The system profile: what this computer is (spec 10.3).
+//! The system profile: what this computer is and what's on it (spec 10.3).
 //!
 //! `wrybill doctor` prints it. From M1 the `system.profile` tool hands the
 //! same profile to a brain, so plans fit the machine.
 //!
-//! A profile is worked out fresh each time [`collect`] is called. Everything
-//! here comes from asking the OS: no program is run and nothing is sent.
+//! A profile is worked out fresh each time [`collect`] is called. Most of it
+//! comes from asking the OS or from looking for files. A short, fixed list of
+//! programs is run, each to answer one question such as its version. Nothing
+//! is sent anywhere.
 //!
 //! A profile never holds the computer's name, the user's name, a serial
-//! number or a network address, so it's safe to print and to paste into a
-//! public issue.
+//! number, a network address or a path, so it's safe to print and to paste
+//! into a public issue.
 
 mod date;
 mod features;
+mod graphics;
+mod installed;
 mod network;
+mod path_search;
+mod run;
 mod system;
 mod updates;
 
@@ -20,6 +26,8 @@ use std::time::{Duration, Instant, SystemTime};
 
 pub use self::date::Date;
 pub use self::features::CpuFeatures;
+pub use self::graphics::Graphics;
+pub use self::installed::{Installed, Runtime, RuntimeState, Shells};
 pub use self::network::Network;
 pub use self::updates::{OsRelease, SecurityUpdates, TABLE_CHECKED, WhyUnknown, security_updates};
 
@@ -41,6 +49,8 @@ pub struct Profile {
     pub disk: Option<Disk>,
     /// Whether the OS has a route out to the internet.
     pub network: Network,
+    /// The shells, package managers, runtimes, browsers and graphics chips.
+    pub installed: Installed,
     /// How long the profile took to work out.
     pub took: Duration,
 }
@@ -70,6 +80,21 @@ pub enum OsFamily {
     Linux,
     /// Anything else.
     Other,
+}
+
+impl OsFamily {
+    /// The family of the OS this program was built for.
+    pub const fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::MacOs
+        } else if cfg!(windows) {
+            Self::Windows
+        } else if cfg!(target_os = "linux") {
+            Self::Linux
+        } else {
+            Self::Other
+        }
+    }
 }
 
 /// The chip.
@@ -127,6 +152,7 @@ pub fn collect() -> Profile {
     let (chip, memory) = system::chip_and_memory();
     let disk = system::disk_holding(std::env::home_dir().as_deref());
     let network = network::check();
+    let installed = installed::collect(os.family);
 
     Profile {
         os,
@@ -135,12 +161,14 @@ pub fn collect() -> Profile {
         memory,
         disk,
         network,
+        installed,
         took: started.elapsed(),
     }
 }
 
-/// Tidies text that came from the OS, so it can be printed anywhere: plain
-/// ASCII on one line, and not too long. Anything else becomes a `?`.
+/// Tidies text that came from the OS or from another program, so it can be
+/// printed anywhere: plain ASCII on one line, and not too long. Anything else
+/// becomes a `?`.
 fn plain(text: &str) -> String {
     let mut tidy = String::new();
     for word in text.split_whitespace() {
@@ -163,6 +191,40 @@ fn plain(text: &str) -> String {
 /// The same, or `None` when nothing is left.
 fn plain_if_any(text: &str) -> Option<String> {
     Some(plain(text)).filter(|tidy| !tidy.is_empty())
+}
+
+/// A folder for one test to make files in. It's removed when the test ends.
+#[cfg(test)]
+pub(crate) struct TestFolder(std::path::PathBuf);
+
+#[cfg(test)]
+impl TestFolder {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestFolder {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+        // The folder the tests share goes too, once it's empty.
+        if let Some(shared) = self.0.parent() {
+            let _ = std::fs::remove_dir(shared);
+        }
+    }
+}
+
+/// A folder for the test called `test`, inside the OS's folder for temporary
+/// files. It doesn't exist yet.
+#[cfg(test)]
+pub(crate) fn test_folder(test: &str) -> TestFolder {
+    let folder = std::env::temp_dir()
+        .join(format!("wrybill-tools-tests-{}", std::process::id()))
+        .join(test);
+    // Left over from an earlier run, if it's there at all.
+    let _ = std::fs::remove_dir_all(&folder);
+    TestFolder(folder)
 }
 
 #[cfg(test)]

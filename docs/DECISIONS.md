@@ -26,6 +26,7 @@ The main design choices and the reason for each, so nobody has to guess why some
 | Safety | Reflection and summaries follow the task's privacy and locality rules, and reflection runs only when a task is worth learning from | Stops private content reaching a cloud brain through a side role, and saves tokens (SPEC 8.4) |
 | Safety | A task store with interrupt and resume; outside side effects are never blindly retried | A crash shouldn't lose work or repeat a post or payment |
 | Safety | A network ledger of Wrybill's own connections, plus a packet-capture test anyone can repeat, instead of packet capture inside Wrybill | What an AI says about where data goes can't be trusted, so destinations are recorded and checkable. Packet capture inside Wrybill would need administrator rights and extra drivers (SPEC 11.10, 11.15, 18) |
+| Safety | The fixed, read-only checks behind `wrybill doctor` aren't Guardian actions | Checking the machine is Wrybill's own behaviour, not an action a brain proposed. What the `system.profile` tool passes on is decided in M1 |
 | Memory | Learning lives in Markdown plus SQLite; no self-modifying code | Transparent, safe and editable (N2) |
 | Memory | Full-text search first; vector search only if evals justify it | No embedding model needed, and `sqlite-vec` is still an alpha release |
 | Memory | Agent Skills format for skills; `AGENTS.md` for coding-agent rules | Portable and widely supported |
