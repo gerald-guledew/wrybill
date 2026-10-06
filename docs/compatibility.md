@@ -10,7 +10,7 @@ It's early days. So far "run" means `wrybill doctor` and `wrybill keys set`, whi
 |---|---|---|---|---|---|---|
 | The maintainer's Mac | macOS 26.7.1 | Apple M5, 10 cores, 32 GB | `aarch64-apple-darwin`, commit `a12033c`, built on the machine | 6 October 2026 | `wrybill doctor`, and `wrybill keys set` with a made-up key | Both worked. Doctor took 0.3 seconds. It found a key that a different build had saved, and macOS showed no Keychain prompt. |
 
-**Still to do: a real laptop from around 2015.** None has been tested yet, and the [M0 brief](milestones/M0.md) asks for one before the milestone counts as done. A 2015 MacBook on macOS 11 or 12, a Windows 10 laptop or an old ThinkPad on Linux would all do. The steps are [further down](#run-it-on-your-own-machine).
+**Still to do: a real laptop from around 2015.** None has been tested yet. It's postponed, not dropped: it waits for a contributor. A 2015 MacBook on macOS 11 or 12, a Windows 10 laptop or an old ThinkPad on Linux would all do. The steps are [further down](#run-it-on-your-own-machine).
 
 ## GitHub's hosted runners
 
