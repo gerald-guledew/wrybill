@@ -1,0 +1,16 @@
+# Build settings shared by every machine, so local and CI builds match.
+#
+# Windows builds link the C runtime statically, so nothing else needs
+# installing (spec 14.1).
+#
+# Never add a CPU-specific flag here. Release builds use the baseline x86-64
+# target, so they run on any 64-bit chip (spec 14.1).
+#
+# Note: a RUSTFLAGS environment variable replaces these settings instead of
+# adding to them, so don't set one when building.
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

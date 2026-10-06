@@ -26,11 +26,19 @@ The main design choices and the reason for each, so nobody has to guess why some
 | Safety | Reflection and summaries follow the task's privacy and locality rules, and reflection runs only when a task is worth learning from | Stops private content reaching a cloud brain through a side role, and saves tokens (SPEC 8.4) |
 | Safety | A task store with interrupt and resume; outside side effects are never blindly retried | A crash shouldn't lose work or repeat a post or payment |
 | Safety | A network ledger of Wrybill's own connections, plus a packet-capture test anyone can repeat, instead of packet capture inside Wrybill | What an AI says about where data goes can't be trusted, so destinations are recorded and checkable. Packet capture inside Wrybill would need administrator rights and extra drivers (SPEC 11.10, 11.15, 18) |
+| Safety | The fixed, read-only checks behind `wrybill doctor` aren't Guardian actions | Checking the machine is Wrybill's own behaviour, not an action a brain proposed. What the `system.profile` tool passes on is decided in M1 |
 | Memory | Learning lives in Markdown plus SQLite; no self-modifying code | Transparent, safe and editable (N2) |
 | Memory | Full-text search first; vector search only if evals justify it | No embedding model needed, and `sqlite-vec` is still an alpha release |
 | Memory | Agent Skills format for skills; `AGENTS.md` for coding-agent rules | Portable and widely supported |
 | Config | TOML config; API keys in the OS keychain | Simple and hard to break; keys stay protected |
 | Config | Data in `~/.wrybill` (movable with `WRYBILL_HOME`); task workspaces in `~/Wrybill/workspaces` | The same on every OS and easy to back up; results stay in a visible folder |
+| Config | `env:` key references are accepted on every OS, and `wrybill doctor` warns wherever one is used | Servers, containers, CI and SSH sessions often can't reach a keychain (SPEC 11.6) |
+| Config | On Linux the keychain is reached through a pure-Rust Secret Service client, not libdbus | The CLI has to start on headless Linux and build as a static `musl` binary (SPEC 6, 14.1) |
+| Config | The hidden prompt in `wrybill keys set` uses the `rpassword` crate | It's small, and it does one job on all three OSes |
+| Config | Settings are optional with sensible defaults: keys are found by their provider's name, and Wrybill works out a model's roles and abilities itself | The main goal is to be easy and simple for the user (SPEC 1) |
 | Browser | Two backends behind one interface (CDP for an installed Chromium browser, WebDriver BiDi for Firefox), always with Wrybill's own profile | Lighter and safer than bundling a browser or using the user's real profile. Chrome 136 and later block automation of the default profile, and Chrome 151 dropped macOS 12, so 2015 Macs need Firefox |
 | Platforms | 64-bit only, with a baseline x86-64 CPU target | Covers almost every 2015 laptop without special builds |
+| Platforms | Linux GNU builds are made on Ubuntu 24.04, and the static `musl` CLI covers older systems | GitHub removes its Ubuntu 22.04 runners on 17 April 2027. Until then CI also runs the static binaries there (SPEC 14.1) |
+| Platforms | "Network up" means the OS has a default route, found without sending anything, and doctor's output leaves out the hostname, username, serial numbers and network addresses | Wrybill sends nothing to third parties to find out (SPEC 10.3), and doctor's output gets pasted into public issues |
 | Testing | A starter eval suite (E1 to E11) defines "any task" until real everyday jobs replace it | Milestones need concrete done-when checks from the start (SPEC 18.1) |
+| Tooling | CI uses only GitHub's own actions, pinned by commit SHA, and `deny.toml` bans OpenSSL and native-tls | The build gets the same care as the dependencies (SPEC 11.8), and "no OpenSSL" (SPEC 14) is enforced by a tool |

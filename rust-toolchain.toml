@@ -1,0 +1,6 @@
+# The exact toolchain every build uses, here and in CI (spec 14).
+# Bump it on purpose, in a commit of its own.
+[toolchain]
+channel = "1.99.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
