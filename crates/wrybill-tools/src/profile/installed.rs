@@ -2,9 +2,13 @@
 //! (spec 10.3).
 //!
 //! A program is only run when its answer is needed, which means a runtime's
-//! version. Shells and package managers are found by looking along the
-//! `PATH`, and browsers by looking where each OS puts them. A browser is
+//! version. Shells, package managers and runtimes are found by looking along
+//! the `PATH`, and browsers by looking where each OS puts them. A browser is
 //! never started.
+//!
+//! Java is also looked for in the folder that `JAVA_HOME` names. That's
+//! where Java's own build tools look first, and a Java that an editor
+//! downloaded is often nowhere else.
 
 use std::collections::VecDeque;
 use std::ffi::OsStr;
@@ -63,21 +67,34 @@ pub struct Runtime {
     pub state: RuntimeState,
 }
 
-/// Whether a runtime is installed.
+/// Whether a runtime was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeState {
-    /// It's installed.
+    /// It was found, so it's installed.
     Found {
         /// Its version, when the program's answer could be read.
         version: Option<String>,
+        /// Where its program was found.
+        found_in: FoundIn,
     },
-    /// It isn't installed.
-    NotInstalled,
+    /// It wasn't found where Wrybill looks. That's all Wrybill knows: it
+    /// may still be installed somewhere else.
+    NotFound,
     /// On a Mac, only Apple's stand-in is there, and it does nothing until
     /// Apple's developer tools are installed.
     NeedsDeveloperTools,
     /// It's there, but it didn't answer in time.
     NoAnswer,
+}
+
+/// Where a runtime's program was found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoundIn {
+    /// On the `PATH`, so its name alone starts it.
+    Path,
+    /// Only in the folder that `JAVA_HOME` names. Its name alone doesn't
+    /// start it, and a command that needs it has to use that folder.
+    JavaHome,
 }
 
 /// A runtime to look for.
@@ -107,7 +124,7 @@ const RUNTIMES: [Wanted; 5] = [
         args: &["--version"],
     },
     Wanted {
-        name: "Java",
+        name: JAVA,
         programs: &["java"],
         args: &["-version"],
     },
@@ -122,6 +139,9 @@ const RUNTIMES: [Wanted; 5] = [
 
 /// The Python launcher that Windows installs of Python come with.
 const WINDOWS_PYTHON_LAUNCHER: &str = "py";
+
+/// The name of the one runtime that's also looked for through `JAVA_HOME`.
+const JAVA: &str = "Java";
 
 /// Shells on macOS and Linux: the name to show, and the program.
 const UNIX_SHELLS: [(&str, &str); 7] = [
@@ -278,11 +298,13 @@ pub(super) fn collect(family: OsFamily) -> Installed {
     let system_root = std::env::var_os("SystemRoot")
         .map(PathBuf::from)
         .filter(|folder| folder.is_absolute());
+    let java_home = java_home_from(std::env::var_os("JAVA_HOME").as_deref());
 
     let (runtimes, graphics_printed) = runtimes_and_graphics(
         &search,
         family,
         apple.as_ref(),
+        java_home.as_deref(),
         graphics::job(family, system_root.as_deref()),
     );
 
@@ -379,8 +401,13 @@ fn browsers(family: OsFamily, search: &SearchPath, places: &BrowserPlaces) -> Ve
 struct Lookup {
     name: &'static str,
     args: &'static [&'static str],
-    /// The programs found for it that haven't been tried yet.
+    /// The programs found for it on the `PATH` that haven't been tried yet.
     untried: VecDeque<PathBuf>,
+    /// The program found for it in the folder `JAVA_HOME` names. It's tried
+    /// last, when nothing on the `PATH` had an answer.
+    in_java_home: Option<PathBuf>,
+    /// Where the program now being asked was found.
+    asking_in: FoundIn,
     /// The answer, once there is one.
     state: Option<RuntimeState>,
     /// Whether one of its programs was Apple's stand-in for the developer
@@ -389,18 +416,32 @@ struct Lookup {
 }
 
 impl Lookup {
-    fn new(wanted: &Wanted, search: &SearchPath, family: OsFamily) -> Self {
+    /// `java_home` is the folder that `JAVA_HOME` names, if it names one.
+    fn new(
+        wanted: &Wanted,
+        search: &SearchPath,
+        family: OsFamily,
+        java_home: Option<&Path>,
+    ) -> Self {
         let mut programs: Vec<&str> = wanted.programs.to_vec();
         if family == OsFamily::Windows && wanted.name == "Python" {
             programs.push(WINDOWS_PYTHON_LAUNCHER);
         }
+        let untried: VecDeque<PathBuf> = programs
+            .into_iter()
+            .filter_map(|program| search.find(program))
+            .collect();
+        let in_java_home = java_home
+            .filter(|_| wanted.name == JAVA)
+            .and_then(|folder| java_in(folder, family))
+            // The same program as one on the `PATH` isn't asked twice.
+            .filter(|program| !untried.contains(program));
         Self {
             name: wanted.name,
             args: wanted.args,
-            untried: programs
-                .into_iter()
-                .filter_map(|program| search.find(program))
-                .collect(),
+            untried,
+            in_java_home,
+            asking_in: FoundIn::Path,
             state: None,
             needs_developer_tools: false,
         }
@@ -419,10 +460,14 @@ impl Lookup {
                 Plan::NothingBehindIt => {}
             }
         }
+        if let Some(program) = self.in_java_home.take() {
+            self.asking_in = FoundIn::JavaHome;
+            return Some(program);
+        }
         self.state = Some(if self.needs_developer_tools {
             RuntimeState::NeedsDeveloperTools
         } else {
-            RuntimeState::NotInstalled
+            RuntimeState::NotFound
         });
         None
     }
@@ -434,10 +479,11 @@ impl Lookup {
             Ok(ran) if ran.succeeded => {
                 self.state = Some(RuntimeState::Found {
                     version: version_in(&ran.stdout).or_else(|| version_in(&ran.stderr)),
+                    found_in: self.asking_in,
                 });
             }
             // A stand-in with nothing behind it says so and reports failure.
-            // That means "not installed", not that something went wrong.
+            // That means it wasn't found, not that something went wrong.
             Ok(_) | Err(RunError::NotStarted) => {}
             Err(RunError::TimedOut) => self.state = Some(RuntimeState::NoAnswer),
         }
@@ -454,11 +500,12 @@ fn runtimes_and_graphics(
     search: &SearchPath,
     family: OsFamily,
     apple: Option<&AppleFacts>,
+    java_home: Option<&Path>,
     graphics_job: Option<Job>,
 ) -> (Vec<Runtime>, Option<String>) {
     let mut lookups: Vec<Lookup> = RUNTIMES
         .iter()
-        .map(|wanted| Lookup::new(wanted, search, family))
+        .map(|wanted| Lookup::new(wanted, search, family, java_home))
         .collect();
     let mut graphics_job = graphics_job;
     let mut graphics_printed = None;
@@ -497,10 +544,29 @@ fn runtimes_and_graphics(
         .into_iter()
         .map(|lookup| Runtime {
             name: lookup.name,
-            state: lookup.state.unwrap_or(RuntimeState::NotInstalled),
+            state: lookup.state.unwrap_or(RuntimeState::NotFound),
         })
         .collect();
     (runtimes, graphics_printed)
+}
+
+/// The folder that `JAVA_HOME` names, from the variable's value. Only a
+/// full path counts: anything else would depend on the current folder.
+fn java_home_from(value: Option<&OsStr>) -> Option<PathBuf> {
+    value
+        .map(PathBuf::from)
+        .filter(|folder| folder.is_absolute())
+}
+
+/// The `java` program inside a Java's own folder, if it's there.
+fn java_in(java_home: &Path, family: OsFamily) -> Option<PathBuf> {
+    let program = if family == OsFamily::Windows {
+        "java.exe"
+    } else {
+        "java"
+    };
+    let program = java_home.join("bin").join(program);
+    program.is_file().then_some(program)
 }
 
 /// Decides whether a program that was found is worth running.
@@ -601,8 +667,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        AppleFacts, BrowserPlaces, Lookup, Plan, RUNTIMES, RuntimeState, Shells, browsers,
-        has_a_java, has_developer_tools, named_programs, plan_for, shells, version_in,
+        AppleFacts, BrowserPlaces, FoundIn, Lookup, Plan, RUNTIMES, RuntimeState, Shells, browsers,
+        has_a_java, has_developer_tools, java_home_from, named_programs, plan_for, shells,
+        version_in,
     };
     use crate::profile::path_search::SearchPath;
     use crate::profile::run::{Ran, RunError};
@@ -893,9 +960,27 @@ mod tests {
             .iter()
             .find(|wanted| wanted.name == "Python")
             .expect("Python is one of the runtimes");
-        let mut lookup = Lookup::new(python, &nothing_on_the_path(), OsFamily::Linux);
+        let mut lookup = Lookup::new(python, &nothing_on_the_path(), OsFamily::Linux, None);
         lookup.untried = found.iter().map(PathBuf::from).collect();
         lookup
+    }
+
+    /// A lookup for Java, with `JAVA_HOME` naming this folder.
+    fn java_lookup(search: &SearchPath, family: OsFamily, java_home: &Path) -> Lookup {
+        let java = RUNTIMES
+            .iter()
+            .find(|wanted| wanted.name == "Java")
+            .expect("Java is one of the runtimes");
+        Lookup::new(java, search, family, Some(java_home))
+    }
+
+    /// What a real `java -version` prints: its version, as an error.
+    fn java_answered(version: &str) -> Result<Ran, RunError> {
+        Ok(Ran {
+            succeeded: true,
+            stdout: String::new(),
+            stderr: format!("openjdk version \"{version}\" 2026-04-21 LTS\n"),
+        })
     }
 
     fn ran(succeeded: bool, stdout: &str) -> Result<Ran, RunError> {
@@ -907,11 +992,11 @@ mod tests {
     }
 
     #[test]
-    fn a_runtime_with_no_program_on_the_path_is_not_installed() {
+    fn a_runtime_with_no_program_on_the_path_is_not_found() {
         let mut lookup = python_lookup(&[]);
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -935,7 +1020,8 @@ mod tests {
         assert_eq!(
             lookup.state,
             Some(RuntimeState::Found {
-                version: Some("3.13.1".to_owned())
+                version: Some("3.13.1".to_owned()),
+                found_in: FoundIn::Path,
             })
         );
         // Once there's an answer, nothing more is run.
@@ -943,14 +1029,14 @@ mod tests {
     }
 
     #[test]
-    fn when_every_program_reports_failure_the_runtime_is_not_installed() {
+    fn when_every_program_reports_failure_the_runtime_is_not_found() {
         let mut lookup = python_lookup(&["/apps/python3"]);
 
         lookup.next_to_run(None);
         lookup.take(ran(false, ""));
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -967,7 +1053,8 @@ mod tests {
         assert_eq!(
             lookup.state,
             Some(RuntimeState::Found {
-                version: Some("25.0.4.1".to_owned())
+                version: Some("25.0.4.1".to_owned()),
+                found_in: FoundIn::Path,
             })
         );
     }
@@ -979,7 +1066,13 @@ mod tests {
         lookup.next_to_run(None);
         lookup.take(ran(true, "hello\n"));
 
-        assert_eq!(lookup.state, Some(RuntimeState::Found { version: None }));
+        assert_eq!(
+            lookup.state,
+            Some(RuntimeState::Found {
+                version: None,
+                found_in: FoundIn::Path,
+            })
+        );
     }
 
     #[test]
@@ -1031,10 +1124,162 @@ mod tests {
         let windows_search = SearchPath::new(Some(folder.path().as_os_str()), Some(".EXE"));
         let unix_search = search_in(folder.path());
 
-        let on_windows = Lookup::new(python, &windows_search, OsFamily::Windows);
+        let on_windows = Lookup::new(python, &windows_search, OsFamily::Windows, None);
         assert_eq!(on_windows.untried, [folder.path().join("py.exe")]);
 
-        let on_linux = Lookup::new(python, &unix_search, OsFamily::Linux);
+        let on_linux = Lookup::new(python, &unix_search, OsFamily::Linux, None);
         assert!(on_linux.untried.is_empty());
+    }
+
+    #[test]
+    fn a_java_that_is_not_on_the_path_is_found_through_java_home() {
+        // As on a Windows laptop where an editor downloaded Java: nothing on
+        // the `PATH`, and `JAVA_HOME` names the folder.
+        let folder = test_folder("installed-java-home");
+        let java_home = folder.path().join("temurin-25.0.3");
+        add_program(&java_home.join("bin"), "java.exe");
+
+        let mut lookup = java_lookup(&nothing_on_the_path(), OsFamily::Windows, &java_home);
+
+        assert_eq!(
+            lookup.next_to_run(None),
+            Some(java_home.join("bin").join("java.exe"))
+        );
+        lookup.take(java_answered("25.0.3"));
+        assert_eq!(
+            lookup.state,
+            Some(RuntimeState::Found {
+                version: Some("25.0.3".to_owned()),
+                found_in: FoundIn::JavaHome,
+            })
+        );
+        assert_eq!(lookup.next_to_run(None), None);
+    }
+
+    #[test]
+    fn the_java_program_has_each_os_s_own_name() {
+        let folder = test_folder("installed-java-names");
+        let (windows_java, unix_java) = (folder.path().join("windows"), folder.path().join("unix"));
+        add_program(&windows_java.join("bin"), "java.exe");
+        add_program(&unix_java.join("bin"), "java");
+        let nothing = nothing_on_the_path();
+
+        for family in [OsFamily::MacOs, OsFamily::Linux] {
+            let mut found = java_lookup(&nothing, family, &unix_java);
+            assert_eq!(
+                found.next_to_run(None),
+                Some(unix_java.join("bin").join("java"))
+            );
+            // A Windows Java isn't one a Mac or Linux can run.
+            let mut missing = java_lookup(&nothing, family, &windows_java);
+            assert_eq!(missing.next_to_run(None), None);
+            assert_eq!(missing.state, Some(RuntimeState::NotFound));
+        }
+        let mut missing = java_lookup(&nothing, OsFamily::Windows, &unix_java);
+        assert_eq!(missing.next_to_run(None), None);
+        assert_eq!(missing.state, Some(RuntimeState::NotFound));
+    }
+
+    #[test]
+    fn a_java_on_the_path_comes_first_and_java_home_is_the_fallback() {
+        let folder = test_folder("installed-java-order");
+        let on_the_path = folder.path().join("on-the-path");
+        let java_home = folder.path().join("java-home");
+        add_program(&on_the_path, "java");
+        add_program(&java_home.join("bin"), "java");
+        let search = search_in(&on_the_path);
+
+        // The one on the `PATH` answers, so that's the answer.
+        let mut lookup = java_lookup(&search, OsFamily::Linux, &java_home);
+        assert_eq!(lookup.next_to_run(None), Some(on_the_path.join("java")));
+        lookup.take(java_answered("21.0.9"));
+        assert_eq!(
+            lookup.state,
+            Some(RuntimeState::Found {
+                version: Some("21.0.9".to_owned()),
+                found_in: FoundIn::Path,
+            })
+        );
+
+        // The one on the `PATH` reports failure, so `JAVA_HOME` is tried.
+        let mut lookup = java_lookup(&search, OsFamily::Linux, &java_home);
+        lookup.next_to_run(None);
+        lookup.take(ran(false, ""));
+        assert_eq!(
+            lookup.next_to_run(None),
+            Some(java_home.join("bin").join("java"))
+        );
+        lookup.take(java_answered("25.0.3"));
+        assert_eq!(
+            lookup.state,
+            Some(RuntimeState::Found {
+                version: Some("25.0.3".to_owned()),
+                found_in: FoundIn::JavaHome,
+            })
+        );
+    }
+
+    #[test]
+    fn a_java_home_that_is_also_on_the_path_is_only_asked_once() {
+        let folder = test_folder("installed-java-once");
+        let java_home = folder.path().join("java-home");
+        add_program(&java_home.join("bin"), "java");
+        let search = search_in(&java_home.join("bin"));
+
+        let mut lookup = java_lookup(&search, OsFamily::Linux, &java_home);
+        lookup.next_to_run(None);
+        lookup.take(ran(false, ""));
+
+        assert_eq!(lookup.next_to_run(None), None);
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
+    }
+
+    #[test]
+    fn a_java_home_with_no_java_in_it_changes_nothing() {
+        let folder = test_folder("installed-java-empty");
+        let java_home = folder.path().join("not-a-java");
+        fs::create_dir_all(java_home.join("bin")).expect("a folder");
+
+        let mut lookup = java_lookup(&nothing_on_the_path(), OsFamily::Linux, &java_home);
+
+        assert_eq!(lookup.next_to_run(None), None);
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
+    }
+
+    #[test]
+    fn java_home_is_only_used_for_java() {
+        let folder = test_folder("installed-java-only");
+        let java_home = folder.path().join("java-home");
+        add_program(&java_home.join("bin"), "java");
+        add_program(&java_home.join("bin"), "python3");
+        let python = RUNTIMES
+            .iter()
+            .find(|wanted| wanted.name == "Python")
+            .expect("Python is one of the runtimes");
+
+        let mut lookup = Lookup::new(
+            python,
+            &nothing_on_the_path(),
+            OsFamily::Linux,
+            Some(&java_home),
+        );
+
+        assert_eq!(lookup.next_to_run(None), None);
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
+    }
+
+    #[test]
+    fn java_home_only_counts_as_a_full_path() {
+        let here = std::env::current_dir().expect("a current folder");
+
+        assert_eq!(java_home_from(Some(here.as_os_str())), Some(here.clone()));
+        for not_a_full_path in ["", "jdk-25", "some/folder"] {
+            assert_eq!(
+                java_home_from(Some(OsStr::new(not_a_full_path))),
+                None,
+                "{not_a_full_path:?}"
+            );
+        }
+        assert_eq!(java_home_from(None), None);
     }
 }

@@ -15,8 +15,8 @@ use wrybill_config::{
     StoreError, key_status, load,
 };
 use wrybill_tools::profile::{
-    self, Chip, CpuFeatures, Disk, DiskKind, Graphics, Memory, Network, Os, OsFamily, Profile,
-    Runtime, RuntimeState, SecurityUpdates, Shells, TABLE_CHECKED, WhyUnknown,
+    self, Chip, CpuFeatures, Disk, DiskKind, FoundIn, Graphics, Memory, Network, Os, OsFamily,
+    Profile, Runtime, RuntimeState, SecurityUpdates, Shells, TABLE_CHECKED, WhyUnknown,
 };
 
 /// The exit status when the config can be used.
@@ -859,13 +859,34 @@ fn runtime_lines(runtime: &Runtime) -> Vec<String> {
     match &runtime.state {
         RuntimeState::Found {
             version: Some(version),
+            found_in: FoundIn::Path,
         } => vec![version.clone()],
-        RuntimeState::Found { version: None } => {
+        RuntimeState::Found {
+            version: None,
+            found_in: FoundIn::Path,
+        } => {
             vec!["Installed, but Wrybill couldn't read its version.".to_owned()]
         }
-        RuntimeState::NotInstalled => vec!["Not installed".to_owned()],
+        // Only Java is looked for this way. Its name alone won't start it,
+        // which is worth saying: a command that just calls `java` will fail.
+        RuntimeState::Found {
+            version: Some(version),
+            found_in: FoundIn::JavaHome,
+        } => vec![format!(
+            "{version}, through JAVA_HOME. `java` isn't on the PATH."
+        )],
+        RuntimeState::Found {
+            version: None,
+            found_in: FoundIn::JavaHome,
+        } => vec![
+            "Installed, through JAVA_HOME, but Wrybill couldn't read its version. `java` isn't on the PATH."
+                .to_owned(),
+        ],
+        // "Not found", never "not installed": Wrybill only knows that it
+        // isn't where it looked.
+        RuntimeState::NotFound => vec!["Not found".to_owned()],
         RuntimeState::NeedsDeveloperTools => vec![
-            "Not installed. It comes with Apple's developer tools.".to_owned(),
+            "Not found. It comes with Apple's developer tools.".to_owned(),
             "Next: xcode-select --install".to_owned(),
         ],
         RuntimeState::NoAnswer => {

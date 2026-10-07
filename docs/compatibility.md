@@ -9,6 +9,8 @@ It's early days. So far "run" means `wrybill doctor` and `wrybill keys set`, whi
 | Machine | OS | Chip and memory | Build | Date | What was run | What happened |
 |---|---|---|---|---|---|---|
 | The maintainer's Mac | macOS 26.7.1 | Apple M5, 10 cores, 32 GB | `aarch64-apple-darwin`, commit `a12033c`, built on the machine | 6 October 2026 | `wrybill doctor`, and `wrybill keys set` with a made-up key | Both worked. Doctor took 0.3 seconds. It found a key that a different build had saved, and macOS showed no Keychain prompt. |
+| The maintainer's ThinkPad, from 2020 | Windows 11 Pro, build 26200 | Intel Core i5-10210U, 4 cores, 15.8 GB | `x86_64-pc-windows-msvc`, commit `2d6679f`, built by CI | 7 October 2026 | `wrybill doctor`, twice | Worked, in 0.9 seconds on its first run and 0.3 on its second. Every line was then checked against the machine, and one was wrong: Java was reported as not installed, though a JDK is there and `JAVA_HOME` names it. `java` isn't on the `PATH`, which was the only place doctor looked. Commit `885da78` fixes that. |
+| The same ThinkPad | Windows 11 Pro, build 26200 | Intel Core i5-10210U, 4 cores, 15.8 GB | `x86_64-pc-windows-msvc`, commit `267eced`, built by CI | 7 October 2026 | `wrybill doctor`, twice | Worked, in 0.3 and 0.4 seconds. Java now reads `25.0.3, through JAVA_HOME`, and Node.js and Docker read "Not found". With that, every line matches the machine. |
 
 **Still to do: a real laptop from around 2015.** None has been tested yet. It's postponed, not dropped: it waits for a contributor. A 2015 MacBook on macOS 11 or 12, a Windows 10 laptop or an old ThinkPad on Linux would all do. The steps are [further down](#run-it-on-your-own-machine).
 

@@ -15,8 +15,8 @@ use wrybill_config::{
     KeyRef, KeyStatus, MemoryStore, Paths, PathsError, Problem, Secret, SecretStore, StoreError,
 };
 use wrybill_tools::profile::{
-    Chip, CpuFeatures, Date, Disk, DiskKind, Graphics, Installed, Memory, Network, Os, OsFamily,
-    Profile, Runtime, RuntimeState, SecurityUpdates, Shells, WhyUnknown,
+    Chip, CpuFeatures, Date, Disk, DiskKind, FoundIn, Graphics, Installed, Memory, Network, Os,
+    OsFamily, Profile, Runtime, RuntimeState, SecurityUpdates, Shells, WhyUnknown,
 };
 
 /// Something shaped like a key. No test may ever find it in what doctor
@@ -32,6 +32,7 @@ fn runtime(name: &'static str, state: RuntimeState) -> Runtime {
 fn version(text: &str) -> RuntimeState {
     RuntimeState::Found {
         version: Some(text.to_owned()),
+        found_in: FoundIn::Path,
     }
 }
 
@@ -105,7 +106,7 @@ fn healthy_mac() -> Report {
                     runtime("Python", version("3.9.6")),
                     runtime("Node.js", version("24.13.0")),
                     runtime("Java", version("25.0.4.1")),
-                    runtime("Docker", RuntimeState::NotInstalled),
+                    runtime("Docker", RuntimeState::NotFound),
                 ],
                 browsers: vec!["Chrome"],
                 graphics: Graphics::Found(vec!["Apple M5".to_owned()]),
@@ -199,10 +200,16 @@ fn old_windows_laptop() -> Report {
                 package_managers: vec!["winget"],
                 runtimes: vec![
                     runtime("git", version("2.47.1.windows.2")),
-                    runtime("Python", RuntimeState::NotInstalled),
+                    runtime("Python", RuntimeState::NotFound),
                     runtime("Node.js", RuntimeState::NoAnswer),
-                    runtime("Java", RuntimeState::Found { version: None }),
-                    runtime("Docker", RuntimeState::NotInstalled),
+                    runtime(
+                        "Java",
+                        RuntimeState::Found {
+                            version: None,
+                            found_in: FoundIn::Path,
+                        },
+                    ),
+                    runtime("Docker", RuntimeState::NotFound),
                 ],
                 browsers: vec!["Edge", "Firefox"],
                 graphics: Graphics::Found(vec![
@@ -283,9 +290,9 @@ fn bare_old_mac() -> Report {
                 runtimes: vec![
                     runtime("git", RuntimeState::NeedsDeveloperTools),
                     runtime("Python", RuntimeState::NeedsDeveloperTools),
-                    runtime("Node.js", RuntimeState::NotInstalled),
-                    runtime("Java", RuntimeState::NotInstalled),
-                    runtime("Docker", RuntimeState::NotInstalled),
+                    runtime("Node.js", RuntimeState::NotFound),
+                    runtime("Java", RuntimeState::NotFound),
+                    runtime("Docker", RuntimeState::NotFound),
                 ],
                 browsers: Vec::new(),
                 graphics: Graphics::Unknown,
@@ -354,8 +361,8 @@ fn linux_server() -> Report {
                 runtimes: vec![
                     runtime("git", version("2.43.0")),
                     runtime("Python", version("3.12.3")),
-                    runtime("Node.js", RuntimeState::NotInstalled),
-                    runtime("Java", RuntimeState::NotInstalled),
+                    runtime("Node.js", RuntimeState::NotFound),
+                    runtime("Java", RuntimeState::NotFound),
                     runtime("Docker", version("27.5.1")),
                 ],
                 browsers: Vec::new(),
@@ -397,7 +404,7 @@ Installed
   Python:           3.9.6
   Node.js:          24.13.0
   Java:             25.0.4.1
-  Docker:           Not installed
+  Docker:           Not found
   Browsers:         Chrome
 
 The profile took 0.3 seconds.
@@ -446,10 +453,10 @@ Installed
   Shells:           cmd, Windows PowerShell
   Package managers: winget
   git:              2.47.1.windows.2
-  Python:           Not installed
+  Python:           Not found
   Node.js:          Warning. It's there, but it didn't answer in time.
   Java:             Installed, but Wrybill couldn't read its version.
-  Docker:           Not installed
+  Docker:           Not found
   Browsers:         Edge, Firefox
 
 The profile took 2.4 seconds.
@@ -492,13 +499,13 @@ This computer
 Installed
   Shells:           fish (your login shell), sh, bash, zsh
   Package managers: None found
-  git:              Not installed. It comes with Apple's developer tools.
+  git:              Not found. It comes with Apple's developer tools.
                     Next: xcode-select --install
-  Python:           Not installed. It comes with Apple's developer tools.
+  Python:           Not found. It comes with Apple's developer tools.
                     Next: xcode-select --install
-  Node.js:          Not installed
-  Java:             Not installed
-  Docker:           Not installed
+  Node.js:          Not found
+  Java:             Not found
+  Docker:           Not found
   Browsers:         None found. Wrybill's browser tool will need Chrome, Edge,
                     Brave, Chromium or Firefox.
 
@@ -539,8 +546,8 @@ Installed
   Package managers: apt
   git:              2.43.0
   Python:           3.12.3
-  Node.js:          Not installed
-  Java:             Not installed
+  Node.js:          Not found
+  Java:             Not found
   Docker:           27.5.1
   Browsers:         None found. Wrybill's browser tool will need Chrome, Edge,
                     Brave, Chromium or Firefox.
@@ -636,6 +643,32 @@ fn the_other_answers_about_security_updates_read_like_this() {
     assert!(
         with(SecurityUpdates::Unknown(WhyUnknown::TableTooOld))
             .contains("Unknown. Wrybill's table is more than a year old")
+    );
+}
+
+#[test]
+fn a_java_found_through_java_home_says_that_its_name_alone_will_not_start_it() {
+    let with_java = |state| {
+        let mut report = healthy_mac();
+        report.profile.installed.runtimes = vec![runtime("Java", state)];
+        flowed(&render(&report))
+    };
+
+    assert!(
+        with_java(RuntimeState::Found {
+            version: Some("25.0.3".to_owned()),
+            found_in: FoundIn::JavaHome,
+        })
+        .contains("Java: 25.0.3, through JAVA_HOME. `java` isn't on the PATH.")
+    );
+    assert!(
+        with_java(RuntimeState::Found {
+            version: None,
+            found_in: FoundIn::JavaHome,
+        })
+        .contains(
+            "Java: Installed, through JAVA_HOME, but Wrybill couldn't read its version. `java` isn't on the PATH."
+        )
     );
 }
 

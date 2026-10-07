@@ -493,7 +493,7 @@ Some Deny rules are **hard** and can't be relaxed in the config: sending secrets
 
 - Software comes only from OS package managers (Homebrew, winget, Scoop, apt, dnf, pacman) or from official vendor domains on an allowlist in the config.
 - Before installing, Wrybill shows the package, its source, its version and what will run, then asks.
-- "Prerequisites" suggested by a web page, a README or a skill go through exactly the same checks. (In February 2026 the ClawHavoc campaign hid 341 malicious skills in a public skills marketplace, using fake "prerequisites" to install password-stealing malware.)
+- "Prerequisites" suggested by a web page, a README or a skill go through exactly the same checks. (In February 2026 an audit of a public skills marketplace found 341 malicious skills. 335 of them, the ClawHavoc campaign, used fake "prerequisites" to install password-stealing malware.)
 - Third-party skills and MCP servers are off by default. When the user enables one, it must come from a source they approve, after a review step, and it's pinned by a hash of its contents. Any change needs a fresh approval.
 - **Wrybill's own dependencies** get the same care: the lockfile is committed, `cargo audit` and `cargo deny` (security advisories, licences, banned or duplicate crates) run in CI, every new dependency is justified (see `AGENTS.md`), and release files are signed, with published checksums (M8).
 
@@ -1080,7 +1080,7 @@ Checked on 1 October 2026.
 - [OWASP Top 10 for Agentic Applications announcement](https://genai.owasp.org/2025/12/09/owasp-genai-security-project-releases-top-10-risks-and-mitigations-for-agentic-ai-security/)
 - [The lethal trifecta for AI agents (Simon Willison)](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)
 - [Agents Rule of Two (Meta)](https://ai.meta.com/blog/practical-ai-agent-security/)
-- [ClawHavoc: 341 malicious skills (Koi Security)](https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting)
+- [341 malicious skills found on ClawHub, most of them from the ClawHavoc campaign (The Hacker News, reporting Koi Security's audit)](https://thehackernews.com/2026/02/researchers-find-341-malicious-clawhub.html)
 - [Anthropic sandbox runtime](https://github.com/anthropic-experimental/sandbox-runtime)
 - [Building a safe, effective sandbox to enable Codex on Windows (OpenAI)](https://openai.com/index/building-codex-windows-sandbox/)
 
