@@ -15,8 +15,8 @@ use wrybill_config::{
     KeyRef, KeyStatus, MemoryStore, Paths, PathsError, Problem, Secret, SecretStore, StoreError,
 };
 use wrybill_tools::profile::{
-    Chip, CpuFeatures, Date, Disk, DiskKind, Graphics, Installed, Memory, Network, Os, OsFamily,
-    Profile, Runtime, RuntimeState, SecurityUpdates, Shells, WhyUnknown,
+    Chip, CpuFeatures, Date, Disk, DiskKind, FoundIn, Graphics, Installed, Memory, Network, Os,
+    OsFamily, Profile, Runtime, RuntimeState, SecurityUpdates, Shells, WhyUnknown,
 };
 
 /// Something shaped like a key. No test may ever find it in what doctor
@@ -32,6 +32,7 @@ fn runtime(name: &'static str, state: RuntimeState) -> Runtime {
 fn version(text: &str) -> RuntimeState {
     RuntimeState::Found {
         version: Some(text.to_owned()),
+        found_in: FoundIn::Path,
     }
 }
 
@@ -201,7 +202,13 @@ fn old_windows_laptop() -> Report {
                     runtime("git", version("2.47.1.windows.2")),
                     runtime("Python", RuntimeState::NotInstalled),
                     runtime("Node.js", RuntimeState::NoAnswer),
-                    runtime("Java", RuntimeState::Found { version: None }),
+                    runtime(
+                        "Java",
+                        RuntimeState::Found {
+                            version: None,
+                            found_in: FoundIn::Path,
+                        },
+                    ),
                     runtime("Docker", RuntimeState::NotInstalled),
                 ],
                 browsers: vec!["Edge", "Firefox"],
@@ -636,6 +643,32 @@ fn the_other_answers_about_security_updates_read_like_this() {
     assert!(
         with(SecurityUpdates::Unknown(WhyUnknown::TableTooOld))
             .contains("Unknown. Wrybill's table is more than a year old")
+    );
+}
+
+#[test]
+fn a_java_found_through_java_home_says_that_its_name_alone_will_not_start_it() {
+    let with_java = |state| {
+        let mut report = healthy_mac();
+        report.profile.installed.runtimes = vec![runtime("Java", state)];
+        flowed(&render(&report))
+    };
+
+    assert!(
+        with_java(RuntimeState::Found {
+            version: Some("25.0.3".to_owned()),
+            found_in: FoundIn::JavaHome,
+        })
+        .contains("Java: 25.0.3, through JAVA_HOME. `java` isn't on the PATH.")
+    );
+    assert!(
+        with_java(RuntimeState::Found {
+            version: None,
+            found_in: FoundIn::JavaHome,
+        })
+        .contains(
+            "Java: Installed, through JAVA_HOME, but Wrybill couldn't read its version. `java` isn't on the PATH."
+        )
     );
 }
 

@@ -27,7 +27,7 @@ use std::time::{Duration, Instant, SystemTime};
 pub use self::date::Date;
 pub use self::features::CpuFeatures;
 pub use self::graphics::Graphics;
-pub use self::installed::{Installed, Runtime, RuntimeState, Shells};
+pub use self::installed::{FoundIn, Installed, Runtime, RuntimeState, Shells};
 pub use self::network::Network;
 pub use self::updates::{OsRelease, SecurityUpdates, TABLE_CHECKED, WhyUnknown, security_updates};
 
