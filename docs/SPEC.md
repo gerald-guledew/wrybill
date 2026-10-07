@@ -1080,7 +1080,7 @@ Checked on 1 October 2026.
 - [OWASP Top 10 for Agentic Applications announcement](https://genai.owasp.org/2025/12/09/owasp-genai-security-project-releases-top-10-risks-and-mitigations-for-agentic-ai-security/)
 - [The lethal trifecta for AI agents (Simon Willison)](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)
 - [Agents Rule of Two (Meta)](https://ai.meta.com/blog/practical-ai-agent-security/)
-- [ClawHavoc: 341 malicious skills (Koi Security)](https://www.koi.ai/blog/clawhavoc-341-malicious-clawedbot-skills-found-by-the-bot-they-were-targeting)
+- [ClawHavoc: 341 malicious skills on ClawHub (The Hacker News, reporting Koi Security's audit)](https://thehackernews.com/2026/02/researchers-find-341-malicious-clawhub.html)
 - [Anthropic sandbox runtime](https://github.com/anthropic-experimental/sandbox-runtime)
 - [Building a safe, effective sandbox to enable Codex on Windows (OpenAI)](https://openai.com/index/building-codex-windows-sandbox/)
 
