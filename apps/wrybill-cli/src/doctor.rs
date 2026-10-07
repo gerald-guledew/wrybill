@@ -882,9 +882,11 @@ fn runtime_lines(runtime: &Runtime) -> Vec<String> {
             "Installed, through JAVA_HOME, but Wrybill couldn't read its version. `java` isn't on the PATH."
                 .to_owned(),
         ],
-        RuntimeState::NotInstalled => vec!["Not installed".to_owned()],
+        // "Not found", never "not installed": Wrybill only knows that it
+        // isn't where it looked.
+        RuntimeState::NotFound => vec!["Not found".to_owned()],
         RuntimeState::NeedsDeveloperTools => vec![
-            "Not installed. It comes with Apple's developer tools.".to_owned(),
+            "Not found. It comes with Apple's developer tools.".to_owned(),
             "Next: xcode-select --install".to_owned(),
         ],
         RuntimeState::NoAnswer => {

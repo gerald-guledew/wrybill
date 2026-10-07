@@ -106,7 +106,7 @@ fn healthy_mac() -> Report {
                     runtime("Python", version("3.9.6")),
                     runtime("Node.js", version("24.13.0")),
                     runtime("Java", version("25.0.4.1")),
-                    runtime("Docker", RuntimeState::NotInstalled),
+                    runtime("Docker", RuntimeState::NotFound),
                 ],
                 browsers: vec!["Chrome"],
                 graphics: Graphics::Found(vec!["Apple M5".to_owned()]),
@@ -200,7 +200,7 @@ fn old_windows_laptop() -> Report {
                 package_managers: vec!["winget"],
                 runtimes: vec![
                     runtime("git", version("2.47.1.windows.2")),
-                    runtime("Python", RuntimeState::NotInstalled),
+                    runtime("Python", RuntimeState::NotFound),
                     runtime("Node.js", RuntimeState::NoAnswer),
                     runtime(
                         "Java",
@@ -209,7 +209,7 @@ fn old_windows_laptop() -> Report {
                             found_in: FoundIn::Path,
                         },
                     ),
-                    runtime("Docker", RuntimeState::NotInstalled),
+                    runtime("Docker", RuntimeState::NotFound),
                 ],
                 browsers: vec!["Edge", "Firefox"],
                 graphics: Graphics::Found(vec![
@@ -290,9 +290,9 @@ fn bare_old_mac() -> Report {
                 runtimes: vec![
                     runtime("git", RuntimeState::NeedsDeveloperTools),
                     runtime("Python", RuntimeState::NeedsDeveloperTools),
-                    runtime("Node.js", RuntimeState::NotInstalled),
-                    runtime("Java", RuntimeState::NotInstalled),
-                    runtime("Docker", RuntimeState::NotInstalled),
+                    runtime("Node.js", RuntimeState::NotFound),
+                    runtime("Java", RuntimeState::NotFound),
+                    runtime("Docker", RuntimeState::NotFound),
                 ],
                 browsers: Vec::new(),
                 graphics: Graphics::Unknown,
@@ -361,8 +361,8 @@ fn linux_server() -> Report {
                 runtimes: vec![
                     runtime("git", version("2.43.0")),
                     runtime("Python", version("3.12.3")),
-                    runtime("Node.js", RuntimeState::NotInstalled),
-                    runtime("Java", RuntimeState::NotInstalled),
+                    runtime("Node.js", RuntimeState::NotFound),
+                    runtime("Java", RuntimeState::NotFound),
                     runtime("Docker", version("27.5.1")),
                 ],
                 browsers: Vec::new(),
@@ -404,7 +404,7 @@ Installed
   Python:           3.9.6
   Node.js:          24.13.0
   Java:             25.0.4.1
-  Docker:           Not installed
+  Docker:           Not found
   Browsers:         Chrome
 
 The profile took 0.3 seconds.
@@ -453,10 +453,10 @@ Installed
   Shells:           cmd, Windows PowerShell
   Package managers: winget
   git:              2.47.1.windows.2
-  Python:           Not installed
+  Python:           Not found
   Node.js:          Warning. It's there, but it didn't answer in time.
   Java:             Installed, but Wrybill couldn't read its version.
-  Docker:           Not installed
+  Docker:           Not found
   Browsers:         Edge, Firefox
 
 The profile took 2.4 seconds.
@@ -499,13 +499,13 @@ This computer
 Installed
   Shells:           fish (your login shell), sh, bash, zsh
   Package managers: None found
-  git:              Not installed. It comes with Apple's developer tools.
+  git:              Not found. It comes with Apple's developer tools.
                     Next: xcode-select --install
-  Python:           Not installed. It comes with Apple's developer tools.
+  Python:           Not found. It comes with Apple's developer tools.
                     Next: xcode-select --install
-  Node.js:          Not installed
-  Java:             Not installed
-  Docker:           Not installed
+  Node.js:          Not found
+  Java:             Not found
+  Docker:           Not found
   Browsers:         None found. Wrybill's browser tool will need Chrome, Edge,
                     Brave, Chromium or Firefox.
 
@@ -546,8 +546,8 @@ Installed
   Package managers: apt
   git:              2.43.0
   Python:           3.12.3
-  Node.js:          Not installed
-  Java:             Not installed
+  Node.js:          Not found
+  Java:             Not found
   Docker:           27.5.1
   Browsers:         None found. Wrybill's browser tool will need Chrome, Edge,
                     Brave, Chromium or Firefox.

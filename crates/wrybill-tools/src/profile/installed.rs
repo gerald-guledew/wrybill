@@ -67,18 +67,19 @@ pub struct Runtime {
     pub state: RuntimeState,
 }
 
-/// Whether a runtime is installed.
+/// Whether a runtime was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeState {
-    /// It's installed.
+    /// It was found, so it's installed.
     Found {
         /// Its version, when the program's answer could be read.
         version: Option<String>,
         /// Where its program was found.
         found_in: FoundIn,
     },
-    /// It isn't installed.
-    NotInstalled,
+    /// It wasn't found where Wrybill looks. That's all Wrybill knows: it
+    /// may still be installed somewhere else.
+    NotFound,
     /// On a Mac, only Apple's stand-in is there, and it does nothing until
     /// Apple's developer tools are installed.
     NeedsDeveloperTools,
@@ -466,7 +467,7 @@ impl Lookup {
         self.state = Some(if self.needs_developer_tools {
             RuntimeState::NeedsDeveloperTools
         } else {
-            RuntimeState::NotInstalled
+            RuntimeState::NotFound
         });
         None
     }
@@ -482,7 +483,7 @@ impl Lookup {
                 });
             }
             // A stand-in with nothing behind it says so and reports failure.
-            // That means "not installed", not that something went wrong.
+            // That means it wasn't found, not that something went wrong.
             Ok(_) | Err(RunError::NotStarted) => {}
             Err(RunError::TimedOut) => self.state = Some(RuntimeState::NoAnswer),
         }
@@ -543,7 +544,7 @@ fn runtimes_and_graphics(
         .into_iter()
         .map(|lookup| Runtime {
             name: lookup.name,
-            state: lookup.state.unwrap_or(RuntimeState::NotInstalled),
+            state: lookup.state.unwrap_or(RuntimeState::NotFound),
         })
         .collect();
     (runtimes, graphics_printed)
@@ -991,11 +992,11 @@ mod tests {
     }
 
     #[test]
-    fn a_runtime_with_no_program_on_the_path_is_not_installed() {
+    fn a_runtime_with_no_program_on_the_path_is_not_found() {
         let mut lookup = python_lookup(&[]);
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -1028,14 +1029,14 @@ mod tests {
     }
 
     #[test]
-    fn when_every_program_reports_failure_the_runtime_is_not_installed() {
+    fn when_every_program_reports_failure_the_runtime_is_not_found() {
         let mut lookup = python_lookup(&["/apps/python3"]);
 
         lookup.next_to_run(None);
         lookup.take(ran(false, ""));
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -1172,11 +1173,11 @@ mod tests {
             // A Windows Java isn't one a Mac or Linux can run.
             let mut missing = java_lookup(&nothing, family, &windows_java);
             assert_eq!(missing.next_to_run(None), None);
-            assert_eq!(missing.state, Some(RuntimeState::NotInstalled));
+            assert_eq!(missing.state, Some(RuntimeState::NotFound));
         }
         let mut missing = java_lookup(&nothing, OsFamily::Windows, &unix_java);
         assert_eq!(missing.next_to_run(None), None);
-        assert_eq!(missing.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(missing.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -1230,7 +1231,7 @@ mod tests {
         lookup.take(ran(false, ""));
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -1242,7 +1243,7 @@ mod tests {
         let mut lookup = java_lookup(&nothing_on_the_path(), OsFamily::Linux, &java_home);
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
@@ -1264,7 +1265,7 @@ mod tests {
         );
 
         assert_eq!(lookup.next_to_run(None), None);
-        assert_eq!(lookup.state, Some(RuntimeState::NotInstalled));
+        assert_eq!(lookup.state, Some(RuntimeState::NotFound));
     }
 
     #[test]
